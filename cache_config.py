@@ -4,12 +4,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Configure cache to use filesystem
+# Configure cache to use simple caching for serverless environment
 cache_config = {
-    'CACHE_TYPE': 'filesystem',
-    'CACHE_DIR': 'flask_cache',
-    'CACHE_DEFAULT_TIMEOUT': 300,
-    'CACHE_THRESHOLD': 1000  # Maximum number of items the cache will store
+    'CACHE_TYPE': 'simple',
+    'CACHE_DEFAULT_TIMEOUT': 300
 }
 
 cache = Cache(config=cache_config)
