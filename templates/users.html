@@ -1,0 +1,590 @@
+{% extends "base.html" %}
+
+{% block title %}Users{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Mobile card view styles */
+    @media (max-width: 768px) {
+        .table-responsive {
+            border: none;
+            padding: 0;
+        }
+        
+        .table {
+            display: none;
+        }
+        
+        .mobile-cards {
+            display: block;
+            padding: 10px;
+        }
+        
+        .user-card {
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 12px;
+            padding: 16px;
+        }
+        
+        .user-card .card-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            padding: 4px 0;
+        }
+        
+        .user-card .card-row:last-child {
+            margin-bottom: 0;
+        }
+        
+        .user-card .label {
+            font-size: 13px;
+            color: #666;
+            flex: 1;
+        }
+        
+        .user-card .value {
+            font-size: 14px;
+            color: #333;
+            font-weight: 500;
+            text-align: right;
+            flex: 1;
+        }
+        
+        .user-card .actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid #eee;
+        }
+        
+        .user-card .btn {
+            flex: 1;
+            padding: 8px;
+            font-size: 14px;
+        }
+        
+        .card-header {
+            flex-direction: column;
+            gap: 12px;
+        }
+        
+        .card-header > div {
+            width: 100%;
+        }
+        
+        .card-header .btn {
+            margin: 4px;
+            flex: 1;
+        }
+    }
+    
+    /* Desktop view styles remain unchanged */
+    @media (min-width: 769px) {
+        .mobile-cards {
+            display: none;
+        }
+    }
+
+    .permission-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 0.5rem;
+        max-height: 200px;
+        overflow-y: auto;
+        padding: 0.5rem;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+    }
+
+    .form-check-label {
+        cursor: pointer;
+        user-select: none;
+    }
+
+    /* Hide permissions section for admin role */
+    .role-admin #permissionsSection {
+        display: none;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">Users Management</h5>
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addUserModal">
+            Add New User
+        </button>
+    </div>
+    <div class="card-body">
+        <!-- Desktop Table View -->
+        <div class="table-responsive">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>Username</th>
+                        <th>Role</th>
+                        <th>2FA Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in users %}
+                    <tr>
+                        <td>{{ user.username }}</td>
+                        <td>{{ user.role }}</td>
+                        <td>{{ "Enabled" if user.totp_enabled else "Disabled" }}</td>
+                        <td>
+                            <button class="btn btn-sm btn-primary edit-user" 
+                                    data-id="{{ user.id }}"
+                                    data-username="{{ user.username }}"
+                                    data-role="{{ user.role }}"
+                                    data-totp-enabled="{{ user.totp_enabled|lower }}">
+                                <i class="fas fa-edit"></i> Edit
+                            </button>
+                            <button class="btn btn-sm btn-danger delete-user" data-id="{{ user.id }}">
+                                Delete
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Mobile Card View -->
+        <div class="mobile-cards">
+            {% for user in users %}
+            <div class="user-card" data-id="{{ user.id }}">
+                <div class="card-row">
+                    <span class="label">Username</span>
+                    <span class="value">{{ user.username }}</span>
+                </div>
+                <div class="card-row">
+                    <span class="label">Role</span>
+                    <span class="value">{{ user.role }}</span>
+                </div>
+                <div class="card-row">
+                    <span class="label">2FA Status</span>
+                    <span class="value">{{ "Enabled" if user.totp_enabled else "Disabled" }}</span>
+                </div>
+                <div class="actions">
+                    <button class="btn btn-primary edit-user" 
+                            data-id="{{ user.id }}"
+                            data-username="{{ user.username }}"
+                            data-role="{{ user.role }}"
+                            data-totp-enabled="{{ user.totp_enabled|lower }}">
+                        <i class="fas fa-edit"></i> Edit
+                    </button>
+                    <button class="btn btn-danger delete-user" data-id="{{ user.id }}">
+                        <i class="fas fa-trash"></i> Delete
+                    </button>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<!-- Add User Modal -->
+<div class="modal fade" id="addUserModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add New User</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addUserForm">
+                    <div class="mb-3">
+                        <label class="form-label">Username</label>
+                        <input type="text" class="form-control" name="username" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Password</label>
+                        <input type="password" class="form-control" name="password" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Confirm Password</label>
+                        <input type="password" class="form-control" name="confirm_password" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Role</label>
+                        <select class="form-control" name="role" required>
+                            <option value="user">User</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input type="checkbox" class="form-check-input" name="totp_enabled" id="addTotp">
+                            <label class="form-check-label" for="addTotp">Enable 2FA Authentication</label>
+                        </div>
+                        <button type="button" id="generateAddTotp" class="btn btn-outline-primary btn-sm mt-2" style="display: none;">
+                            Generate 2FA Code
+                        </button>
+                    </div>
+                    <div id="addQrCodeSection" style="display: none;" class="mb-3 text-center">
+                        <div class="alert alert-info">
+                            <p>Scan this QR code with your authenticator app (Google Authenticator, Authy, etc.)</p>
+                            <div id="addQrCode" class="my-3 mx-auto d-block" style="max-width: 200px; height: 200px;"></div>
+                            <p class="mb-0"><small>Or enter this code manually:</small></p>
+                            <p><code id="addSecretKey" class="user-select-all"></code></p>
+                        </div>
+                    </div>
+                    <div class="mb-3" id="permissionsSection">
+                        <label class="form-label">Permissions</label>
+                        <div class="permission-grid">
+                            {% for permission in permissions %}
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input" name="permissions" value="{{ permission.id }}" id="perm_{{ permission.id }}">
+                                <label class="form-check-label" for="perm_{{ permission.id }}" title="{{ permission.description }}">
+                                    {{ permission.name }}
+                                </label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="saveUser">Save User</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit User Modal -->
+<div class="modal fade" id="editUserModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit User</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editUserForm">
+                    <input type="hidden" name="user_id">
+                    <div class="mb-3">
+                        <label class="form-label">Username</label>
+                        <input type="text" class="form-control" name="username" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">New Password</label>
+                        <input type="password" class="form-control" name="password" placeholder="Leave blank to keep current password">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Confirm New Password</label>
+                        <input type="password" class="form-control" name="confirm_password">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Role</label>
+                        <select class="form-control" name="role" required>
+                            <option value="user">User</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input type="checkbox" class="form-check-input" name="totp_enabled" id="editTotp">
+                            <label class="form-check-label" for="editTotp">Enable 2FA Authentication</label>
+                        </div>
+                        <button type="button" id="generateEditTotp" class="btn btn-outline-primary btn-sm mt-2" style="display: none;">
+                            Generate 2FA Code
+                        </button>
+                    </div>
+                    <div id="editQrCodeSection" style="display: none;" class="mb-3 text-center">
+                        <div class="alert alert-info">
+                            <p>Scan this QR code with your authenticator app (Google Authenticator, Authy, etc.)</p>
+                            <div id="editQrCode" class="my-3 mx-auto d-block" style="max-width: 200px; height: 200px;"></div>
+                            <p class="mb-0"><small>Or enter this code manually:</small></p>
+                            <p><code id="editSecretKey" class="user-select-all"></code></p>
+                        </div>
+                    </div>
+                    <div class="mb-3" id="permissionsSection">
+                        <label class="form-label">Permissions</label>
+                        <div class="permission-grid">
+                            {% for permission in permissions %}
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input" name="permissions" value="{{ permission.id }}" id="perm_{{ permission.id }}">
+                                <label class="form-check-label" for="perm_{{ permission.id }}" title="{{ permission.description }}">
+                                    {{ permission.name }}
+                                </label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="updateUser">Update User</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const addModal = new bootstrap.Modal(document.getElementById('addUserModal'));
+    const editModal = new bootstrap.Modal(document.getElementById('editUserModal'));
+
+    // Handle 2FA toggle in add form
+    document.getElementById('addTotp').addEventListener('change', function() {
+        const generateBtn = document.getElementById('generateAddTotp');
+        generateBtn.style.display = this.checked ? 'inline-block' : 'none';
+        if (!this.checked) {
+            document.getElementById('addQrCodeSection').style.display = 'none';
+        }
+    });
+
+    // Handle 2FA toggle in edit form
+    document.getElementById('editTotp').addEventListener('change', function() {
+        const generateBtn = document.getElementById('generateEditTotp');
+        generateBtn.style.display = this.checked ? 'inline-block' : 'none';
+        if (!this.checked) {
+            document.getElementById('editQrCodeSection').style.display = 'none';
+        }
+    });
+
+    // Generate 2FA code for add form
+    document.getElementById('generateAddTotp').addEventListener('click', function() {
+        const username = document.querySelector('#addUserForm [name="username"]').value;
+        if (!username) {
+            alert('Please enter a username first');
+            return;
+        }
+
+        fetch('/users/generate-2fa', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ username: username })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const qrImage = document.getElementById('addQrCode');
+                qrImage.innerHTML = ''; // Clear previous QR code
+                new QRCode(qrImage, {
+                    text: data.totp_uri,
+                    width: 200,
+                    height: 200,
+                    correctLevel: QRCode.CorrectLevel.H
+                });
+                document.getElementById('addSecretKey').textContent = data.totp_secret;
+                document.getElementById('addQrCodeSection').style.display = 'block';
+            } else {
+                alert('Error generating 2FA code: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error generating 2FA code. Please try again.');
+        });
+    });
+
+    // Generate 2FA code for edit form
+    document.getElementById('generateEditTotp').addEventListener('click', function() {
+        const userId = document.querySelector('#editUserForm [name="user_id"]').value;
+        const username = document.querySelector('#editUserForm [name="username"]').value;
+        if (!username) {
+            alert('Please enter a username first');
+            return;
+        }
+
+        fetch(`/users/${userId}/generate-2fa`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ username: username })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const qrImage = document.getElementById('editQrCode');
+                qrImage.innerHTML = ''; // Clear previous QR code
+                new QRCode(qrImage, {
+                    text: data.totp_uri,
+                    width: 200,
+                    height: 200,
+                    correctLevel: QRCode.CorrectLevel.H
+                });
+                document.getElementById('editSecretKey').textContent = data.totp_secret;
+                document.getElementById('editQrCodeSection').style.display = 'block';
+            } else {
+                alert('Error generating 2FA code: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error generating 2FA code. Please try again.');
+        });
+    });
+
+    // Handle role change to show/hide permissions
+    function handleRoleChange(select) {
+        const form = select.closest('form');
+        if (form) {
+            if (select.value === 'admin') {
+                form.classList.add('role-admin');
+            } else {
+                form.classList.remove('role-admin');
+            }
+        }
+    }
+
+    // Add role change handlers
+    document.querySelectorAll('select[name="role"]').forEach(select => {
+        select.addEventListener('change', function() {
+            handleRoleChange(this);
+        });
+    });
+
+    // Update save user function
+    document.getElementById('saveUser').addEventListener('click', function() {
+        const form = document.getElementById('addUserForm');
+        const formData = new FormData(form);
+        const data = {
+            username: formData.get('username'),
+            password: formData.get('password'),
+            role: formData.get('role'),
+            totp_enabled: formData.get('totp_enabled') === 'on',
+            permissions: Array.from(formData.getAll('permissions')).map(Number)
+        };
+        
+        fetch('/users', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Error saving user: ' + data.error);
+            }
+        });
+    });
+
+    // Update edit user function
+    document.getElementById('updateUser').addEventListener('click', function() {
+        const form = document.getElementById('editUserForm');
+        const formData = new FormData(form);
+        const data = {
+            username: formData.get('username'),
+            password: formData.get('password'),
+            role: formData.get('role'),
+            totp_enabled: formData.get('totp_enabled') === 'on',
+            permissions: Array.from(formData.getAll('permissions')).map(Number)
+        };
+        const id = formData.get('user_id');
+        
+        fetch(`/users/${id}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Error updating user: ' + data.error);
+            }
+        });
+    });
+
+    // Update edit user modal to load permissions
+    document.querySelectorAll('.edit-user').forEach(button => {
+        button.addEventListener('click', function() {
+            const userId = this.dataset.id;
+            const username = this.dataset.username;
+            const role = this.dataset.role;
+            const totpEnabled = this.dataset.totpEnabled === 'true';
+            
+            // Get the form and populate it
+            const form = document.getElementById('editUserForm');
+            form.querySelector('[name="user_id"]').value = userId;
+            form.querySelector('[name="username"]').value = username;
+            form.querySelector('[name="role"]').value = role;
+            form.querySelector('[name="totp_enabled"]').checked = totpEnabled;
+            
+            // Show/hide generate 2FA button based on totp_enabled
+            const generateBtn = document.getElementById('generateEditTotp');
+            generateBtn.style.display = totpEnabled ? 'inline-block' : 'none';
+            
+            // Hide QR code section when opening modal
+            document.getElementById('editQrCodeSection').style.display = 'none';
+            
+            // Clear password fields
+            form.querySelector('[name="password"]').value = '';
+            form.querySelector('[name="confirm_password"]').value = '';
+            
+            // Update form class based on role
+            if (role === 'admin') {
+                form.classList.add('role-admin');
+            } else {
+                form.classList.remove('role-admin');
+            }
+            
+            // Fetch and set permissions
+            fetch(`/users/${userId}/permissions`)
+                .then(response => response.json())
+                .then(data => {
+                    // First uncheck all permissions
+                    form.querySelectorAll('input[name="permissions"]').forEach(checkbox => {
+                        checkbox.checked = false;
+                    });
+                    
+                    // Then check the user's permissions
+                    data.permissions.forEach(permId => {
+                        const checkbox = form.querySelector(`input[name="permissions"][value="${permId}"]`);
+                        if (checkbox) checkbox.checked = true;
+                    });
+                });
+            
+            // Show the modal
+            const editModal = new bootstrap.Modal(document.getElementById('editUserModal'));
+            editModal.show();
+        });
+    });
+
+    // Delete User
+    document.querySelectorAll('.delete-user').forEach(button => {
+        button.addEventListener('click', function() {
+            if (confirm('Are you sure you want to delete this user?')) {
+                const userId = this.dataset.id;
+                fetch(`/users/${userId}`, {
+                    method: 'DELETE'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        location.reload();
+                    } else {
+                        alert('Error deleting user: ' + data.error);
+                    }
+                });
+            }
+        });
+    });
+});
+</script>
+{% endblock %} 

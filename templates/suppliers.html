@@ -1,0 +1,409 @@
+{% extends "base.html" %}
+
+{% block title %}Suppliers{% endblock %}
+
+{% block extra_css %}
+<style>
+    .supplier-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1rem;
+        padding: 1rem;
+    }
+
+    .supplier-card {
+        background: var(--card-bg);
+        border-radius: 8px;
+        box-shadow: var(--shadow-sm);
+        padding: 1rem;
+        transition: var(--transition);
+    }
+
+    .supplier-card:hover {
+        box-shadow: var(--shadow);
+        transform: translateY(-2px);
+    }
+
+    .card-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.5rem 0;
+    }
+
+    .card-row .label {
+        font-size: 1rem;
+        color: var(--text-color);
+        font-weight: 500;
+    }
+
+    .card-row .value {
+        font-size: 1rem;
+        color: var(--text-color);
+        font-weight: 600;
+        text-align: right;
+    }
+
+    .supplier-card .actions {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: 1rem;
+        padding-top: 0.5rem;
+        border-top: 1px solid var(--border-color);
+    }
+
+    .supplier-card .btn {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.875rem;
+        flex: 1;
+    }
+
+    @media (max-width: 1400px) {
+        .supplier-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+
+    @media (max-width: 768px) {
+        .supplier-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .search-section {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .search-section .form-control {
+        max-width: 300px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <div>
+            <h5 class="mb-0">Suppliers List</h5>
+            <div class="mt-2">
+                <input type="text" id="supplierSearch" class="form-control" placeholder="Search suppliers...">
+            </div>
+        </div>
+        <div>
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addSupplierModal">
+                Add New Supplier
+            </button>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="supplier-grid">
+            {% for supplier in suppliers %}
+            <div class="supplier-card" data-id="{{ supplier.id }}">
+                <div class="card-row">
+                    <span class="label">Name</span>
+                    <span class="value">{{ supplier.name }}</span>
+                </div>
+                {% if supplier.phone %}
+                <div class="card-row">
+                    <span class="label">Phone</span>
+                    <span class="value">{{ supplier.phone }}</span>
+                </div>
+                {% endif %}
+                {% if supplier.email %}
+                <div class="card-row">
+                    <span class="label">Email</span>
+                    <span class="value">{{ supplier.email }}</span>
+                </div>
+                {% endif %}
+                <div class="card-row">
+                    <span class="label">Products</span>
+                    <span class="value">{{ supplier.products|length }}</span>
+                </div>
+                <div class="actions">
+                    <button class="btn btn-info view-supplier" data-id="{{ supplier.id }}">
+                        <i class="fas fa-eye"></i> View
+                    </button>
+                    <button class="btn btn-primary edit-supplier" 
+                            data-id="{{ supplier.id }}"
+                            data-name="{{ supplier.name }}"
+                            data-phone="{{ supplier.phone or '' }}"
+                            data-email="{{ supplier.email or '' }}"
+                            data-address="{{ supplier.address or '' }}">
+                        <i class="fas fa-edit"></i> Edit
+                    </button>
+                    <button class="btn btn-danger delete-supplier" data-id="{{ supplier.id }}">
+                        <i class="fas fa-trash"></i> Delete
+                    </button>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<!-- Add Supplier Modal -->
+<div class="modal fade" id="addSupplierModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add New Supplier</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addSupplierForm">
+                    <div class="mb-3">
+                        <label class="form-label">Name</label>
+                        <input type="text" class="form-control" name="name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Phone</label>
+                        <input type="tel" class="form-control" name="phone">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Email</label>
+                        <input type="email" class="form-control" name="email">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Address</label>
+                        <textarea class="form-control" name="address" rows="3"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="saveSupplier">Save Supplier</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Supplier Modal -->
+<div class="modal fade" id="editSupplierModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit Supplier</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editSupplierForm">
+                    <input type="hidden" name="id">
+                    <div class="mb-3">
+                        <label class="form-label">Name</label>
+                        <input type="text" class="form-control" name="name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Phone</label>
+                        <input type="tel" class="form-control" name="phone">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Email</label>
+                        <input type="email" class="form-control" name="email">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Address</label>
+                        <textarea class="form-control" name="address" rows="3"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="updateSupplier">Update Supplier</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Import Products Modal -->
+<div class="modal fade" id="importProductsModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Import Products by Code</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <h6>Instructions:</h6>
+                    <ol>
+                        <li>Create an Excel file with a single column of product codes</li>
+                        <li>Each row should contain one product code</li>
+                        <li>Upload the Excel file using the button below</li>
+                    </ol>
+                </div>
+                <form id="importProductsForm">
+                    <input type="hidden" name="supplier_id" id="importSupplierId">
+                    <div class="mb-3">
+                        <label class="form-label">Excel File</label>
+                        <input type="file" class="form-control" id="productsExcelFile" accept=".xlsx,.xls,.csv">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="importProducts">Import Products</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Search functionality
+    document.getElementById('supplierSearch').addEventListener('input', function(e) {
+        const searchText = e.target.value.toLowerCase();
+        const supplierCards = document.querySelectorAll('.supplier-card');
+        
+        supplierCards.forEach(card => {
+            const text = card.textContent.toLowerCase();
+            card.style.display = text.includes(searchText) ? '' : 'none';
+        });
+    });
+
+    // Add Supplier
+    document.getElementById('saveSupplier').addEventListener('click', function() {
+        const form = document.getElementById('addSupplierForm');
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+        
+        fetch('/suppliers', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Error saving supplier: ' + data.error);
+            }
+        });
+    });
+
+    // Edit Supplier
+    document.querySelectorAll('.edit-supplier').forEach(button => {
+        button.addEventListener('click', function() {
+            const form = document.getElementById('editSupplierForm');
+            const modal = new bootstrap.Modal(document.getElementById('editSupplierModal'));
+            
+            form.querySelector('[name="id"]').value = this.dataset.id;
+            form.querySelector('[name="name"]').value = this.dataset.name;
+            form.querySelector('[name="phone"]').value = this.dataset.phone;
+            form.querySelector('[name="email"]').value = this.dataset.email;
+            form.querySelector('[name="address"]').value = this.dataset.address;
+            
+            modal.show();
+        });
+    });
+
+    // Update Supplier
+    document.getElementById('updateSupplier').addEventListener('click', function() {
+        const form = document.getElementById('editSupplierForm');
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+        const id = data.id;
+        
+        fetch(`/suppliers/${id}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Error updating supplier: ' + data.error);
+            }
+        });
+    });
+
+    // Delete Supplier
+    document.querySelectorAll('.delete-supplier').forEach(button => {
+        button.addEventListener('click', function() {
+            if (confirm('Are you sure you want to delete this supplier?')) {
+                const id = this.dataset.id;
+                
+                fetch(`/suppliers/${id}`, {
+                    method: 'DELETE'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        location.reload();
+                    } else {
+                        alert('Error deleting supplier: ' + data.error);
+                    }
+                });
+            }
+        });
+    });
+
+    // View Supplier with Import Option
+    document.querySelectorAll('.view-supplier').forEach(button => {
+        button.addEventListener('click', function() {
+            const id = this.dataset.id;
+            window.location.href = `/suppliers/${id}`;
+        });
+    });
+
+    // Import Products from Excel
+    document.getElementById('importProducts').addEventListener('click', function() {
+        const fileInput = document.getElementById('productsExcelFile');
+        const supplierId = document.getElementById('importSupplierId').value;
+        
+        if (!fileInput.files || !fileInput.files[0]) {
+            alert('Please select a file first');
+            return;
+        }
+
+        const file = fileInput.files[0];
+        const reader = new FileReader();
+
+        reader.onload = function(e) {
+            try {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+                
+                // Extract product codes (assuming they're in the first column)
+                const productCodes = rows.map(row => row[0]).filter(code => code);
+
+                // Send to server
+                fetch(`/suppliers/${supplierId}/products/import`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ product_codes: productCodes })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        location.reload();
+                    } else {
+                        alert('Error importing products: ' + data.error);
+                    }
+                });
+            } catch (error) {
+                alert('Error reading file: ' + error.message);
+            }
+        };
+
+        reader.readAsArrayBuffer(file);
+    });
+});
+</script>
+{% endblock %} 

@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Print Invoice</title>
+    <meta charset="UTF-8">
+    <style>
+        @page {
+            size: A5;
+            margin: 0.3cm;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            font-size: 9pt;
+            background: white;
+            text-transform: uppercase;  /* Add uppercase transformation */
+        }
+        .page {
+            width: 100%;
+            position: relative;
+            padding: 0.3cm;
+            box-sizing: border-box;
+            min-height: calc(100vh - 0.6cm);
+            display: flex;
+            flex-direction: column;
+            border: 1px solid #000;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 0.3cm;
+        }
+        .header h2 {
+            margin: 0;
+            font-size: 12pt;
+            font-weight: bold;
+        }
+        .invoice-info {
+            margin-bottom: 0.3cm;
+            border-bottom: 1px solid #000;
+            padding-bottom: 0.2cm;
+        }
+        .invoice-info table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+        }
+        .invoice-info td {
+            padding: 2px 10px !important;  /* Added horizontal padding */
+            width: 33.33%;
+            font-size: 9pt;
+        }
+        .invoice-info td:nth-child(2) {
+            text-align: center;
+        }
+        .invoice-info td:last-child {
+            text-align: right;
+        }
+        .content-wrapper {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        .items-table-wrapper {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            margin-bottom: 0.8cm;
+        }
+        .items-table {
+            width: 100%;
+            border-collapse: collapse;
+            flex: 1;
+        }
+        .items-table th, .items-table td {
+            border: 0.5px solid #000;  /* Thinner borders */
+            padding: 2px 4px;
+            font-size: 9pt;
+            height: 0.5cm;
+            box-sizing: border-box;
+        }
+        .items-table th {
+            background-color: #f5f5f5;
+            font-weight: bold;
+            text-align: center;
+            height: 0.7cm;
+        }
+        .items-table td {
+            height: 0.5cm !important;  /* Reduced row height */
+            min-height: 0.5cm;
+            vertical-align: middle;
+        }
+        .carry-forward-row td,
+        .page-total-row td {
+            background-color: #f8f9fa;  /* Slightly different background */
+            font-weight: bold;
+        }
+        .page-footer {
+            margin-top: auto;
+            page-break-inside: avoid;
+            break-inside: avoid;
+            position: relative;
+        }
+        .totals-wrapper {
+            margin-top: 0.3cm;
+            background: white;
+            text-align: right;
+            padding-right: 4px;
+            border-top: 0.5px solid #000;  /* Thinner top border */
+            padding-top: 0.2cm;
+            padding-bottom: 2cm;
+        }
+        .total-row {
+            font-size: 14pt;
+            font-weight: bold;
+        }
+        .total-row .label {
+            display: inline-block;
+            margin-right: 10px;
+        }
+        .total-row .amount {
+            display: inline-block;
+            min-width: 100px;
+        }
+        .page-number {
+            position: absolute;
+            bottom: 0.1cm;  /* Adjusted closer to page edge */
+            left: 0.3cm;
+            font-size: 8pt;
+            color: #666;
+        }
+        .page-totals {
+            margin-top: 0.3cm;
+            text-align: right;
+            padding-right: 4px;
+        }
+        .page-totals .total-row {
+            font-size: 10pt;
+            font-weight: normal;
+        }
+        .totals-wrapper {
+            border-top: 0.5px solid #000;  /* Thinner top border */
+            padding-top: 0.2cm;
+            margin-top: 0.3cm;
+        }
+        .carried-forward {
+            text-align: right;
+            margin: 0.2cm 0;
+            font-size: 10pt;
+            padding-right: 0.5cm;
+        }
+        .empty-row td {
+            border: none !important;
+            height: 0.3cm !important;  /* Reduce empty row height */
+        }
+        @media print {
+            .page {
+                height: 100vh;
+                page-break-after: always;
+                border: 1px solid #000;
+            }
+            .items-table {
+                page-break-inside: auto;
+            }
+            .items-table tr {
+                page-break-inside: avoid;
+                page-break-after: auto;
+            }
+            .items-table thead {
+                display: table-header-group;
+            }
+            .items-table tbody {
+                page-break-before: avoid;
+                page-break-after: avoid;
+            }
+            .page-footer {
+                position: relative;
+                bottom: auto;
+                left: auto;
+                right: auto;
+            }
+            /* Keep header with first row */
+            .items-table thead, .items-table tbody tr:first-child {
+                break-inside: avoid;
+            }
+            /* Ensure space for footer */
+            .items-table-wrapper {
+                margin-bottom: 0.5cm;
+            }
+            /* Hide grand total on non-last pages */
+            .page:not(:last-of-type) .totals-wrapper {
+                display: none;
+            }
+        }
+    </style>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            window.print();
+        });
+        window.addEventListener('afterprint', function() {
+            window.close();
+        });
+    </script>
+</head>
+<body>
+    {% set items_per_page = 26 %}  {# Strict 26 items per page #}
+    {% set num_items = invoice.items|length %}
+    {% set total_pages = (num_items + items_per_page - 1) // items_per_page %}
+    {% set ns = namespace(running_total=0, prev_total=0) %}
+    
+    {% for page in range(total_pages) %}
+    {% set start_idx = page * items_per_page %}
+    {% set end_idx = [start_idx + items_per_page, num_items]|min %}
+    {% set page_items = invoice.items[start_idx:end_idx] %}
+    
+    {# Calculate page total with carry forward #}
+    {% set current_items_sum = page_items|sum(attribute='amount') %}
+    {% if loop.first %}
+        {% set page_total = current_items_sum %}
+    {% else %}
+        {% set page_total = ns.prev_total + current_items_sum %}
+    {% endif %}
+    {% set ns.running_total = page_total %}
+    
+    {# Pad with empty items if needed #}
+    {% set empty_rows = range(items_per_page - page_items|length) %}
+    
+    <div class="page">
+        {% if loop.first %}
+        <div class="header">
+            <h2>விலைப்பட்டியல்</h2>
+        </div>
+        <div class="invoice-info">
+            <table>
+                <tr>
+                    <td style="text-align: left; width: 40%;">
+                        <strong>வாடிக்கையாளர்:</strong> 
+                        {{ invoice.customer.tamil_name or invoice.customer_name }}
+                    </td>
+                    <td style="text-align: center; width: 30%;"><strong>பில் எண்:</strong> {{ invoice.order_number }}</td>
+                    <td style="text-align: right; width: 30%;"><strong>தேதி:</strong> {{ invoice.date.strftime('%d-%m-%Y') }}</td>
+                </tr>
+            </table>
+        </div>
+        {% else %}
+        {% endif %}
+
+        <div class="content-wrapper">
+            <div class="items-table-wrapper">
+                <table class="items-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 5%;">வ.எண்</th>
+                            <th style="width: 45%;">விவரம்</th>
+                            <th style="width: 10%;">அலகு</th>
+                            <th style="width: 12%;">அளவு</th>
+                            <th style="width: 13%;">விலை</th>
+                            <th style="width: 15%;">தொகை</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if not loop.first %}
+                        <tr class="carry-forward-row">
+                            <td colspan="5" style="text-align: right; font-weight: bold;">முன்பக்கத்தொகை</td>
+                            <td style="text-align: right; font-weight: bold;">{{ "%.3f"|format(ns.prev_total) }}</td>
+                        </tr>
+                        {% endif %}
+                        
+                        {% for item in page_items %}
+                        <tr>
+                            <td style="text-align: center;">{{ loop.index + start_idx }}</td>
+                            <td>{{ item.product.tamil_name or item.product.description }}</td>
+                            <td style="text-align: center;">{{ item.product.uom }}</td>
+                            <td style="text-align: right;">{{ "%.3f"|format(item.quantity) }}</td>
+                            <td style="text-align: right;">{{ "%.2f"|format(item.price) }}</td>
+                            <td style="text-align: right;">{{ "%.3f"|format(item.amount) }}</td>
+                        </tr>
+                        {% endfor %}
+                        
+                        {% for _ in empty_rows %}
+                        <tr class="empty-row">
+                            <td>&nbsp;</td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                        </tr>
+                        {% endfor %}
+                        
+                        {% if total_pages > 1 %}
+                        <tr class="page-total-row">
+                            <td colspan="5" style="text-align: right; font-weight: bold;">பக்க மொத்தம்:</td>
+                            <td style="text-align: right; font-weight: bold;">{{ "%.3f"|format(page_total) }}</td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="page-footer">
+            {% if loop.last %}
+            <div class="totals-wrapper">
+                <div class="total-row">
+                    <span class="label">மொத்தம்:</span>
+                    <span class="amount">{{ "%.3f"|format(invoice.total_amount|round(3)|float) }}</span>
+                </div>
+            </div>
+            {% endif %}
+            <div class="page-number">பக்கம் {{ page + 1 }} / {{ total_pages }}</div>
+        </div>
+    </div>
+    {% set ns.prev_total = ns.running_total %}
+    {% endfor %}
+</body>
+</html> 

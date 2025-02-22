@@ -1,0 +1,454 @@
+{% extends "base.html" %}
+
+{% block title %}Customers{% endblock %}
+
+{% block extra_css %}
+<style>
+    .customer-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1rem;
+        padding: 1rem;
+    }
+
+    .customer-card {
+        background: var(--card-bg);
+        border-radius: 8px;
+        box-shadow: var(--shadow-sm);
+        padding: 1rem;
+        transition: var(--transition);
+    }
+
+    .customer-card:hover {
+        box-shadow: var(--shadow);
+        transform: translateY(-2px);
+    }
+
+    .card-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 0.5rem;
+        padding: 0.25rem 0;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .card-row:last-child {
+        border-bottom: none;
+        margin-bottom: 0;
+    }
+
+    .card-row .label {
+        font-size: 0.875rem;
+        color: var(--text-color);
+        opacity: 0.8;
+        font-weight: 500;
+        flex: 1;
+    }
+
+    .card-row .value {
+        font-size: 0.875rem;
+        color: var(--text-color);
+        font-weight: 600;
+        text-align: right;
+        flex: 1;
+    }
+
+    .balance {
+        font-size: 1.1rem;
+        font-weight: bold;
+    }
+
+    .balance.positive {
+        color: var(--bs-danger);
+    }
+
+    .balance.negative {
+        color: var(--bs-success);
+    }
+
+    .balance.zero {
+        color: var(--bs-secondary);
+    }
+
+    .customer-card .actions {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: 1rem;
+        padding-top: 0.5rem;
+        border-top: 1px solid var(--border-color);
+    }
+
+    .customer-card .btn {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.875rem;
+        flex: 1;
+    }
+
+    @media (max-width: 1400px) {
+        .customer-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+
+    @media (max-width: 768px) {
+        .customer-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <div>
+            <h5 class="mb-0">Customers List</h5>
+            <div class="mt-2">
+                <input type="text" id="customerSearch" class="form-control" placeholder="Search customers...">
+            </div>
+        </div>
+        <div>
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addCustomerModal">
+                Add New Customer
+            </button>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="customer-grid">
+            {% for customer in customers %}
+            <div class="customer-card" data-id="{{ customer.id }}">
+                <div class="card-row">
+                    <span class="label">Name</span>
+                    <span class="value">{{ customer.name }}</span>
+                </div>
+                {% if customer.phone %}
+                <div class="card-row">
+                    <span class="label">Phone</span>
+                    <span class="value">{{ customer.phone }}</span>
+                </div>
+                {% endif %}
+                {% if customer.email %}
+                <div class="card-row">
+                    <span class="label">Email</span>
+                    <span class="value">{{ customer.email }}</span>
+                </div>
+                {% endif %}
+                <div class="card-row">
+                    <span class="label">Total Invoices</span>
+                    <span class="value">{{ customer.invoices|length }}</span>
+                </div>
+                <div class="card-row">
+                    <span class="label">Balance</span>
+                    <span class="value balance {% if customer.balance > 0 %}positive{% elif customer.balance < 0 %}negative{% else %}zero{% endif %}">
+                        ₹{{ "%.2f"|format(customer.balance|abs) }}
+                        {% if customer.balance > 0 %}
+                        (Due)
+                        {% elif customer.balance < 0 %}
+                        (Surplus)
+                        {% else %}
+                        (Settled)
+                        {% endif %}
+                    </span>
+                </div>
+                <div class="actions">
+                    <button class="btn btn-info view-customer" data-id="{{ customer.id }}">
+                        <i class="fas fa-eye"></i> View
+                    </button>
+                    <button class="btn btn-primary edit-customer" 
+                            data-id="{{ customer.id }}"
+                            data-name="{{ customer.name }}"
+                            data-phone="{{ customer.phone or '' }}"
+                            data-email="{{ customer.email or '' }}"
+                            data-address="{{ customer.address or '' }}">
+                        <i class="fas fa-edit"></i> Edit
+                    </button>
+                    <button class="btn btn-success add-payment" data-id="{{ customer.id }}">
+                        <i class="fas fa-money-bill"></i> Payment
+                    </button>
+                    <button class="btn btn-danger delete-customer" data-id="{{ customer.id }}" data-name="{{ customer.name }}">
+                        <i class="fas fa-trash"></i> Delete
+                    </button>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<!-- Add Customer Modal -->
+<div class="modal fade" id="addCustomerModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add New Customer</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addCustomerForm">
+                    <div class="mb-3">
+                        <label class="form-label">Name</label>
+                        <input type="text" class="form-control" name="name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Phone</label>
+                        <input type="tel" class="form-control" name="phone">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Email</label>
+                        <input type="email" class="form-control" name="email">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Address</label>
+                        <textarea class="form-control" name="address" rows="3"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="saveCustomer">Save Customer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Customer Modal -->
+<div class="modal fade" id="editCustomerModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit Customer</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editCustomerForm">
+                    <input type="hidden" name="id">
+                    <div class="mb-3">
+                        <label class="form-label">Name</label>
+                        <input type="text" class="form-control" name="name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Phone</label>
+                        <input type="tel" class="form-control" name="phone">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Email</label>
+                        <input type="email" class="form-control" name="email">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Address</label>
+                        <textarea class="form-control" name="address" rows="3"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="updateCustomer">Update Customer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Payment Modal -->
+<div class="modal fade" id="addPaymentModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Payment</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addPaymentForm">
+                    <input type="hidden" name="customer_id">
+                    <div class="mb-3">
+                        <label class="form-label">Amount</label>
+                        <input type="number" class="form-control" name="amount" step="0.01" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Payment Method</label>
+                        <select class="form-control" name="payment_method" required>
+                            <option value="cash">Cash</option>
+                            <option value="card">Card</option>
+                            <option value="upi">UPI</option>
+                            <option value="bank_transfer">Bank Transfer</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Reference Number</label>
+                        <input type="text" class="form-control" name="reference_number">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Notes</label>
+                        <textarea class="form-control" name="notes" rows="2"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="savePayment">Save Payment</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Search functionality
+    document.getElementById('customerSearch').addEventListener('input', function(e) {
+        const searchText = e.target.value.toLowerCase();
+        const customerCards = document.querySelectorAll('.customer-card');
+        
+        customerCards.forEach(card => {
+            const text = card.textContent.toLowerCase();
+            card.style.display = text.includes(searchText) ? '' : 'none';
+        });
+    });
+
+    // Add Customer
+    document.getElementById('saveCustomer').addEventListener('click', function() {
+        const form = document.getElementById('addCustomerForm');
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+        
+        fetch('/customers', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Error saving customer: ' + data.error);
+            }
+        });
+    });
+
+    // Edit Customer
+    function handleEditClick() {
+        const form = document.getElementById('editCustomerForm');
+        const modal = new bootstrap.Modal(document.getElementById('editCustomerModal'));
+        
+        form.querySelector('[name="id"]').value = this.dataset.id;
+        form.querySelector('[name="name"]').value = this.dataset.name;
+        form.querySelector('[name="phone"]').value = this.dataset.phone;
+        form.querySelector('[name="email"]').value = this.dataset.email;
+        form.querySelector('[name="address"]').value = this.dataset.address;
+        
+        modal.show();
+    }
+
+    document.querySelectorAll('.edit-customer').forEach(button => {
+        button.addEventListener('click', handleEditClick);
+    });
+
+    // Update Customer
+    document.getElementById('updateCustomer').addEventListener('click', function() {
+        const form = document.getElementById('editCustomerForm');
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+        const id = data.id;
+        
+        fetch(`/customers/${id}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Error updating customer: ' + data.error);
+            }
+        });
+    });
+
+    // Add Payment
+    function handleAddPayment() {
+        const form = document.getElementById('addPaymentForm');
+        const modal = new bootstrap.Modal(document.getElementById('addPaymentModal'));
+        
+        form.querySelector('[name="customer_id"]').value = this.dataset.id;
+        form.querySelector('[name="amount"]').value = '';
+        form.querySelector('[name="payment_method"]').value = 'cash';
+        form.querySelector('[name="reference_number"]').value = '';
+        form.querySelector('[name="notes"]').value = '';
+        
+        modal.show();
+    }
+
+    document.querySelectorAll('.add-payment').forEach(button => {
+        button.addEventListener('click', handleAddPayment);
+    });
+
+    // Save Payment
+    document.getElementById('savePayment').addEventListener('click', function() {
+        const form = document.getElementById('addPaymentForm');
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+        
+        fetch('/customers/payment', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Error saving payment: ' + data.error);
+            }
+        });
+    });
+
+    // View Customer
+    document.querySelectorAll('.view-customer').forEach(button => {
+        button.addEventListener('click', function() {
+            const id = this.dataset.id;
+            window.location.href = `/customers/${id}`;
+        });
+    });
+
+    // Add delete customer functionality
+    document.querySelectorAll('.delete-customer').forEach(button => {
+        button.addEventListener('click', function() {
+            const id = this.dataset.id;
+            const name = this.dataset.name;
+            
+            if (confirm(`Are you sure you want to delete customer "${name}"? This action cannot be undone.`)) {
+                fetch(`/customers/${id}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Remove the customer card from the UI
+                        const card = document.querySelector(`.customer-card[data-id="${id}"]`);
+                        if (card) {
+                            card.remove();
+                        }
+                    } else {
+                        alert('Error deleting customer: ' + data.error);
+                    }
+                });
+            }
+        });
+    });
+});
+</script>
+{% endblock %} 

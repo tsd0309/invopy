@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>{% block title %}{% endblock %} - Calculator</title>
+    
+    <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#2c3e50">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="application-name" content="Calculator">
+    
+    <!-- iOS Meta Tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Calculator">
+    
+    <!-- PWA Icons -->
+    <link rel="icon" type="image/png" sizes="72x72" href="/static/icons/icon-72x72.png">
+    <link rel="icon" type="image/png" sizes="96x96" href="/static/icons/icon-96x96.png">
+    <link rel="icon" type="image/png" sizes="128x128" href="/static/icons/icon-128x128.png">
+    <link rel="icon" type="image/png" sizes="144x144" href="/static/icons/icon-144x144.png">
+    <link rel="icon" type="image/png" sizes="152x152" href="/static/icons/icon-152x152.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="/static/icons/icon-192x192.png">
+    <link rel="icon" type="image/png" sizes="384x384" href="/static/icons/icon-384x384.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="/static/icons/icon-512x512.png">
+    
+    <!-- Apple Touch Icons -->
+    <link rel="apple-touch-icon" sizes="72x72" href="/static/icons/icon-72x72.png">
+    <link rel="apple-touch-icon" sizes="96x96" href="/static/icons/icon-96x96.png">
+    <link rel="apple-touch-icon" sizes="128x128" href="/static/icons/icon-128x128.png">
+    <link rel="apple-touch-icon" sizes="144x144" href="/static/icons/icon-144x144.png">
+    <link rel="apple-touch-icon" sizes="152x152" href="/static/icons/icon-152x152.png">
+    <link rel="apple-touch-icon" sizes="192x192" href="/static/icons/icon-192x192.png">
+    <link rel="apple-touch-icon" sizes="384x384" href="/static/icons/icon-384x384.png">
+    <link rel="apple-touch-icon" sizes="512x512" href="/static/icons/icon-512x512.png">
+    
+    <!-- Safari Pinned Tab Icon -->
+    <link rel="mask-icon" href="/static/icons/icon-512x512.png" color="#2c3e50">
+    
+    <!-- Windows Meta Tags -->
+    <meta name="msapplication-TileColor" content="#2c3e50">
+    <meta name="msapplication-TileImage" content="/static/icons/icon-144x144.png">
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/static/manifest.json">
+    
+    <!-- Stylesheets -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    {% block extra_css %}{% endblock %}
+    <style>
+        :root {
+            --bg-color: #f8f9fa;
+            --text-color: #212529;
+            --card-bg: #ffffff;
+            --border-color: #e9ecef;
+            --table-stripe: #f8f9fa;
+            --input-bg: #ffffff;
+            --input-text: #212529;
+            --navbar-bg: #2c3e50;
+            --navbar-text: #ffffff;
+            --dropdown-bg: #ffffff;
+            --dropdown-text: #212529;
+            --dropdown-hover: #f8f9fa;
+            --btn-text: #ffffff;
+            --header-bg: #f8f9fa;
+            --table-border: #dee2e6;
+            --table-header: #f8f9fa;
+            --shadow-sm: 0 .125rem .25rem rgba(0,0,0,.075);
+            --shadow: 0 .5rem 1rem rgba(0,0,0,.15);
+            --transition: all 0.3s ease;
+        }
+        
+        .dark-mode {
+            --bg-color: #1a1a1a;
+            --text-color: #e1e1e1;
+            --card-bg: #2d2d2d;
+            --border-color: #404040;
+            --table-stripe: #2d2d2d;
+            --input-bg: #333333;
+            --input-text: #e1e1e1;
+            --navbar-bg: #1a1a1a;
+            --navbar-text: #ffffff;
+            --dropdown-bg: #333333;
+            --dropdown-text: #e1e1e1;
+            --dropdown-hover: #404040;
+            --header-bg: #2d2d2d;
+            --table-border: #404040;
+            --table-header: #2d2d2d;
+        }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            font-size: var(--base-font-size, 14px);
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            padding-top: 2.75rem;
+            text-transform: capitalize;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* Exclude certain elements from capitalization */
+        .no-capitalize, 
+        input, 
+        textarea, 
+        [contenteditable], 
+        .tamil-text,
+        code,
+        pre {
+            text-transform: none;
+        }
+
+        /* Keep numbers and special characters as they are */
+        .preserve-text {
+            text-transform: none;
+        }
+
+        .navbar {
+            background-color: var(--navbar-bg) !important;
+            padding: 0.25rem 2rem;
+            box-shadow: var(--shadow-sm);
+            height: 2.75rem;
+        }
+
+        .navbar-brand {
+            font-weight: 700;
+            font-size: 1.1rem;
+            padding: 0;
+            letter-spacing: -0.01em;
+        }
+
+        .navbar-dark .navbar-nav .nav-link {
+            font-weight: 500;
+            letter-spacing: 0.01em;
+        }
+
+        .navbar-dark .navbar-nav .nav-link:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+
+        main {
+            flex: 1;
+            width: 100%;
+            max-width: 100%;
+            padding: 2rem;
+        }
+
+        .container-fluid {
+            max-width: 100%;
+            padding: 0 2rem;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 0.5rem;
+            box-shadow: var(--shadow-sm);
+            transition: var(--transition);
+            margin-bottom: 1.5rem;
+        }
+
+        .card:hover {
+            box-shadow: var(--shadow);
+        }
+
+        .card-header {
+            background-color: var(--card-bg);
+            border-bottom: 1px solid var(--border-color);
+            padding: 1rem 1.5rem;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+        }
+
+        .card-body {
+            padding: 1.5rem;
+        }
+
+        .table {
+            color: var(--text-color);
+            border-color: var(--table-border);
+            margin-bottom: 0;
+        }
+
+        .table thead th {
+            background-color: var(--table-header);
+            border-color: var(--table-border);
+            color: var(--text-color);
+            font-weight: 600;
+            padding: 1rem;
+            white-space: nowrap;
+            font-weight: 600;
+            letter-spacing: 0.01em;
+            text-transform: uppercase;
+            font-size: 0.85rem;
+        }
+
+        .table td {
+            border-color: var(--table-border);
+            padding: 1rem;
+            vertical-align: middle;
+        }
+
+        .table-striped tbody tr:nth-of-type(odd) {
+            background-color: var(--table-stripe);
+        }
+
+        .form-control {
+            background-color: var(--input-bg);
+            border-color: var(--border-color);
+            color: var(--input-text);
+            padding: 0.75rem 1rem;
+            border-radius: 0.375rem;
+            transition: var(--transition);
+        }
+
+        .form-control:focus {
+            background-color: var(--input-bg);
+            border-color: var(--border-color);
+            color: var(--input-text);
+            box-shadow: 0 0 0 0.2rem rgba(44, 62, 80, 0.25);
+        }
+
+        .btn {
+            padding: 0.4rem 1rem;
+            border-radius: 0.25rem;
+            font-weight: 600;
+            font-size: 0.9rem;
+            transition: var(--transition);
+            letter-spacing: 0.01em;
+        }
+
+        .btn-primary {
+            background-color: #2c3e50;
+            border-color: #2c3e50;
+        }
+
+        .btn-primary:hover {
+            background-color: #34495e;
+            border-color: #34495e;
+        }
+
+        .btn-success {
+            background-color: #27ae60;
+            border-color: #27ae60;
+        }
+
+        .btn-success:hover {
+            background-color: #2ecc71;
+            border-color: #2ecc71;
+        }
+
+        .btn-danger {
+            background-color: #c0392b;
+            border-color: #c0392b;
+        }
+
+        .btn-danger:hover {
+            background-color: #e74c3c;
+            border-color: #e74c3c;
+        }
+
+        .modal-content {
+            background-color: var(--card-bg);
+            border: none;
+            border-radius: 0.5rem;
+            box-shadow: var(--shadow);
+        }
+
+        .modal-header {
+            border-bottom: 1px solid var(--border-color);
+            padding: 1.5rem;
+        }
+
+        .modal-body {
+            padding: 1.5rem;
+        }
+
+        .modal-footer {
+            border-top: 1px solid var(--border-color);
+            padding: 1.5rem;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding-top: 2.5rem;
+            }
+
+            .container-fluid {
+                padding: 0 1rem;
+            }
+
+            main {
+                padding: 1rem;
+            }
+
+            .navbar {
+                padding: 0.25rem 1rem;
+                height: 3rem;
+            }
+
+            .navbar-toggler {
+                padding: 0.25rem;
+                font-size: 1rem;
+                border: none;
+                height: 2.5rem;
+                width: 2.5rem;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .navbar-toggler-icon {
+                width: 1.25rem;
+                height: 1.25rem;
+            }
+
+            .navbar-collapse {
+                position: fixed;
+                top: 3rem;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: var(--bs-dark);
+                padding: 1rem;
+                z-index: 1030;
+                overflow-y: auto;
+            }
+
+            .navbar-nav {
+                margin-top: 0.5rem;
+            }
+
+            .navbar-nav .nav-link {
+                padding: 0.75rem 1rem;
+                font-size: 1rem;
+                border-radius: 0.25rem;
+            }
+
+            .navbar-brand {
+                font-size: 1rem;
+                padding: 0;
+            }
+
+            .navbar-dark .navbar-nav .nav-link {
+                padding: 0.25rem 0.5rem;
+                font-size: 0.875rem;
+            }
+
+            .btn {
+                padding: 0.35rem 0.75rem;
+                font-size: 0.875rem;
+            }
+
+            .content {
+                padding-top: 1rem;
+            }
+        }
+
+        /* Status bar and PWA styles */
+        @media all and (display-mode: standalone) {
+            body::before {
+                content: '';
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                height: env(safe-area-inset-top);
+                background-color: var(--navbar-bg);
+                z-index: 9999;
+            }
+        }
+
+        .content {
+            padding-top: 1.5rem;
+        }
+
+        .content.no-padding {
+            padding-top: 0;
+        }
+    </style>
+    <!-- PWA Meta Tags -->
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+    <meta name="theme-color" content="#2c3e50">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Calculator">
+    <!-- iOS icons -->
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/icon-152x152.png') }}">
+    <link rel="apple-touch-icon" sizes="152x152" href="{{ url_for('static', filename='icons/icon-152x152.png') }}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='icons/icon-192x192.png') }}">
+    <link rel="apple-touch-icon" sizes="167x167" href="{{ url_for('static', filename='icons/icon-152x152.png') }}">
+    <!-- iOS splash screens -->
+    <link rel="apple-touch-startup-image" href="{{ url_for('static', filename='icons/splash-640x1136.png') }}" media="(device-width: 320px) and (device-height: 568px) and (-webkit-device-pixel-ratio: 2)">
+    <link rel="apple-touch-startup-image" href="{{ url_for('static', filename='icons/splash-750x1334.png') }}" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2)">
+    <link rel="apple-touch-startup-image" href="{{ url_for('static', filename='icons/splash-1242x2208.png') }}" media="(device-width: 414px) and (device-height: 736px) and (-webkit-device-pixel-ratio: 3)">
+    <link rel="apple-touch-startup-image" href="{{ url_for('static', filename='icons/splash-1125x2436.png') }}" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3)">
+    <link rel="apple-touch-startup-image" href="{{ url_for('static', filename='icons/splash-1242x2688.png') }}" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3)">
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/static/sw.js')
+                    .then((registration) => {
+                        console.log('ServiceWorker registration successful');
+                    })
+                    .catch((err) => {
+                        console.log('ServiceWorker registration failed: ', err);
+                    });
+            });
+        }
+    </script>
+    <script>
+        // Prevent zooming
+        document.addEventListener('touchstart', (event) => {
+            if (event.touches.length > 1) {
+                event.preventDefault();
+            }
+        }, { passive: false });
+        
+        let lastTouchEnd = 0;
+        document.addEventListener('touchend', (event) => {
+            const now = (new Date()).getTime();
+            if (now - lastTouchEnd <= 300) {
+                event.preventDefault();
+            }
+            lastTouchEnd = now;
+        }, { passive: false });
+    </script>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark fixed-top">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="{{ url_for('index') }}">🗒️</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    {% if session.get('user_id') %}
+                        {% set current_user = get_user(session.get('user_id')) %}
+                        {% if current_user.role == 'admin' or check_permission('view_customers') %}
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('customers') }}">
+                                <i class="fas fa-users"></i> Customers
+                            </a>
+                        </li>
+                        {% endif %}
+                        
+                        {% if current_user.role == 'admin' or check_permission('view_products') %}
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('products') }}">
+                                <i class="fas fa-box"></i> Products
+                            </a>
+                        </li>
+                        {% endif %}
+                        
+                        {% if current_user.role == 'admin' or check_permission('view_invoices') %}
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('invoices') }}">
+                                <i class="fas fa-file-invoice"></i> Invoices
+                            </a>
+                        </li>
+                        {% endif %}
+                        
+                        {% if current_user.role == 'admin' or check_permission('create_invoices') %}
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('new_invoice') }}">
+                                <i class="fas fa-plus"></i> New Invoice
+                            </a>
+                        </li>
+                        {% endif %}
+
+                        {% if current_user.role == 'admin' %}
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('suppliers') }}">
+                                <i class="fas fa-truck"></i> Suppliers
+                            </a>
+                        </li>
+                        {% endif %}
+                        
+                        {% if current_user.role == 'admin' or check_permission('view_reports') %}
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('reports') }}">
+                                <i class="fas fa-chart-bar"></i> Reports
+                            </a>
+                        </li>
+                        {% endif %}
+                        
+                        {% if current_user.role == 'admin' %}
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('users') }}">
+                                <i class="fas fa-user-cog"></i> Users
+                            </a>
+                        </li>
+                        {% endif %}
+                        
+                        {% if current_user.role == 'admin' or check_permission('manage_settings') %}
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('settings') }}">
+                                <i class="fas fa-cog"></i> Settings
+                            </a>
+                        </li>
+                        {% endif %}
+                    {% endif %}
+                </ul>
+                <ul class="navbar-nav ms-auto">
+                    {% if session.get('user_id') %}
+                        {% set current_user = get_user(session.get('user_id')) %}
+                        <li class="nav-item">
+                            <span class="nav-link">
+                                <i class="fas fa-user"></i> {{ current_user.username }}
+                            </span>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('logout') }}">
+                                <i class="fas fa-sign-out-alt"></i> Logout
+                            </a>
+                        </li>
+                    {% endif %}
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid content {% if request.endpoint == 'new_invoice' %}no-padding{% endif %}">
+        {% block content %}{% endblock %}
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    {% block extra_js %}{% endblock %}
+    <script>
+        // Initialize dark mode from localStorage
+        document.documentElement.classList.toggle('dark-mode', localStorage.getItem('darkMode') === 'true');
+        
+        // Font size controls
+        document.documentElement.style.setProperty('--base-font-size', localStorage.getItem('base-font-size') || '14px');
+        
+        function changeFontSize(delta) {
+            const currentSize = parseInt(getComputedStyle(document.body).fontSize);
+            const newSize = currentSize + delta;
+            document.documentElement.style.setProperty('--base-font-size', newSize + 'px');
+            localStorage.setItem('base-font-size', newSize + 'px');
+        }
+    </script>
+</body>
+</html> 

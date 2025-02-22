@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        @page {
+            size: A5;
+            margin: 0.3cm;
+        }
+        body {
+            font-size: 16pt;
+            padding: 0;
+            margin: 0;
+            line-height: 1.2;
+        }
+        .no-print {
+            display: block;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+        }
+        th, td {
+            padding: 2px;
+            border: 0.3px solid #000;
+            line-height: 1.2;
+            height: 0.6cm;
+            font-size: inherit;
+        }
+        .sno { width: 5%; }
+        .order-no { width: 12%; }
+        .customer { width: 58%; }
+        .amount { width: 25%; text-align: right; }
+        .total-row td {
+            border-top: 0.5px solid #000;
+        }
+        @media print {
+            body {
+                font-size: 12pt;
+            }
+            .no-print {
+                display: none !important;
+            }
+            .page {
+                page-break-after: always;
+                height: 100vh;
+            }
+        }
+    </style>
+</head>
+<body>
+    <table>
+        <colgroup>
+            <col class="sno">
+            <col class="order-no">
+            <col class="customer">
+            <col class="amount">
+        </colgroup>
+        <tr>
+            <th>S.N</th>
+            <th>No.</th>
+            <th>Customer</th>
+            <th class="amount">Amount</th>
+        </tr>
+        {% for invoice in invoices %}
+        <tr>
+            <td>{{ loop.index }}</td>
+            <td>{{ invoice.order_number }}</td>
+            <td>{{ invoice.customer_name }}</td>
+            <td class="amount">₹{{ "%.2f"|format(invoice.total_amount) }}</td>
+        </tr>
+        {% endfor %}
+        <tr class="total-row">
+            <td colspan="3">Total</td>
+            <td class="amount">₹{{ "%.2f"|format(total_amount) }}</td>
+        </tr>
+    </table>
+
+    <div style="text-align: center; margin-top: 20px;" class="no-print">
+        <button onclick="window.print()" 
+                style="padding: 8px 20px; 
+                       background: #007bff; 
+                       color: white; 
+                       border: none; 
+                       border-radius: 4px;
+                       cursor: pointer;">
+            Print Summary
+        </button>
+    </div>
+</body>
+</html> 

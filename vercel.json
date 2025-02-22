@@ -1,0 +1,49 @@
+{
+    "version": 2,
+    "builds": [
+        {
+            "src": "wsgi.py",
+            "use": "@vercel/python",
+            "config": {
+                "maxLambdaSize": "15mb",
+                "runtime": "python3.9"
+            }
+        }
+    ],
+    "routes": [
+        {
+            "src": "/static/(.*)",
+            "dest": "/static/$1"
+        },
+        {
+            "src": "/(.*)",
+            "dest": "wsgi.py"
+        }
+    ],
+    "env": {
+        "FLASK_ENV": "production",
+        "FLASK_APP": "wsgi.py",
+        "PYTHONPATH": ".",
+        "CACHE_TYPE": "filesystem",
+        "CACHE_DIR": "/tmp/flask_cache",
+        "CACHE_DEFAULT_TIMEOUT": "300"
+    },
+    "regions": ["all"],
+    "functions": {
+        "api/*.py": {
+            "memory": 1024,
+            "maxDuration": 10
+        }
+    },
+    "crons": [
+        {
+            "path": "/api/cleanup-cache",
+            "schedule": "0 0 * * *"
+        }
+    ],
+    "build": {
+        "env": {
+            "PIP_TARGET": ".pip"
+        }
+    }
+} 

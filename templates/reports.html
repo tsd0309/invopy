@@ -1,0 +1,455 @@
+{% extends "base.html" %}
+
+{% block title %}Reports{% endblock %}
+
+{% block extra_css %}
+<style>
+    .stats-card {
+        background-color: var(--card-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 0.5rem;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+        transition: var(--transition);
+        box-shadow: var(--shadow-sm);
+        height: 100%;
+    }
+    
+    .stats-card:hover {
+        transform: translateY(-3px);
+        box-shadow: var(--shadow);
+    }
+    
+    .stats-card .icon {
+        font-size: 2.5rem;
+        margin-bottom: 1rem;
+        color: var(--navbar-bg);
+        opacity: 0.9;
+    }
+    
+    .stats-card .title {
+        font-size: 0.875rem;
+        color: var(--text-color);
+        opacity: 0.8;
+        margin-bottom: 0.5rem;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    .stats-card .value {
+        font-size: 1.75rem;
+        font-weight: 600;
+        color: var(--text-color);
+        line-height: 1.2;
+    }
+    
+    .chart-card {
+        background-color: var(--card-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 0.5rem;
+        padding: 1.5rem;
+        margin-bottom: 2.5rem;
+        height: 400px;
+        box-shadow: var(--shadow-sm);
+        transition: var(--transition);
+    }
+    
+    .chart-card:hover {
+        box-shadow: var(--shadow);
+    }
+    
+    .chart-card h5 {
+        margin-bottom: 1.5rem;
+        color: var(--text-color);
+        font-weight: 600;
+        font-size: 1.1rem;
+    }
+
+    .row {
+        margin-bottom: 2rem;
+    }
+
+    .dashboard-header {
+        margin-bottom: 3rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="dashboard-header">
+        <h2>Reports</h2>
+        <div class="date-filter">
+            <!-- Add date filter controls here if needed -->
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-sm-6 col-xl-3">
+            <div class="stats-card">
+                <div class="icon">
+                    <i class="fas fa-box"></i>
+                </div>
+                <div class="title">Total Products</div>
+                <div class="value">{{ stats.total_products }}</div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-xl-3">
+            <div class="stats-card">
+                <div class="icon">
+                    <i class="fas fa-file-invoice"></i>
+                </div>
+                <div class="title">Total Invoices</div>
+                <div class="value">{{ stats.total_invoices }}</div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-xl-3">
+            <div class="stats-card">
+                <div class="icon">
+                    <i class="fas fa-rupee-sign"></i>
+                </div>
+                <div class="title">Total Sales</div>
+                <div class="value">₹{{ "%.2f"|format(stats.total_sales) }}</div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-xl-3">
+            <div class="stats-card">
+                <div class="icon">
+                    <i class="fas fa-exclamation-triangle"></i>
+                </div>
+                <div class="title">Low Stock Items</div>
+                <div class="value">{{ stats.low_stock_products|length }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-lg-8">
+            <div class="chart-card">
+                <h5>Sales Trend</h5>
+                <canvas id="salesChart"></canvas>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="chart-card">
+                <h5>Top Selling Products</h5>
+                <canvas id="productsChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-lg-6">
+            <div class="chart-card">
+                <h5>Slow-Moving Products</h5>
+                <canvas id="slowMovingChart"></canvas>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="chart-card">
+                <h5>Stock-to-Sales Ratio</h5>
+                <canvas id="stockSalesRatioChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-lg-6">
+            <div class="chart-card">
+                <h5>Inventory Aging</h5>
+                <canvas id="inventoryAgingChart"></canvas>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="chart-card">
+                <h5>Sales Forecast (Next 30 Days)</h5>
+                <canvas id="salesForecastChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Inventory Health Overview</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-sm-6 col-lg-3">
+                            <div class="stats-card">
+                                <div class="title">Total Inventory Cost</div>
+                                <div class="value">₹{{ "%.2f"|format(stats.total_inventory_cost) }}</div>
+                            </div>
+                        </div>
+                        <div class="col-sm-6 col-lg-3">
+                            <div class="stats-card">
+                                <div class="title">Stock-Out Products</div>
+                                <div class="value">{{ stats.stockout_count }}</div>
+                            </div>
+                        </div>
+                        <div class="col-sm-6 col-lg-3">
+                            <div class="stats-card">
+                                <div class="title">Avg Stock-to-Sales Ratio</div>
+                                <div class="value">{{ "%.2f"|format(stats.avg_stock_sales_ratio) }}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{{ super() }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Load all charts
+    loadSalesTrendChart();
+    loadTopProductsChart();
+    loadSlowMovingChart();
+    loadStockSalesRatioChart();
+    loadInventoryAgingChart();
+    loadSalesForecastChart();
+});
+
+function loadSalesTrendChart() {
+    fetch('/api/sales_trend')
+        .then(response => response.json())
+        .then(data => {
+            const ctx = document.getElementById('salesChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.labels,
+                    datasets: [{
+                        label: 'Sales',
+                        data: data.values,
+                        borderColor: '#0d6efd',
+                        tension: 0.1,
+                        fill: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.1)'
+                            },
+                            ticks: {
+                                callback: function(value) {
+                                    return '₹' + value;
+                                }
+                            }
+                        },
+                        x: {
+                            grid: {
+                                display: false
+                            }
+                        }
+                    }
+                }
+            });
+        });
+}
+
+function loadTopProductsChart() {
+    fetch('/api/top_products')
+        .then(response => response.json())
+        .then(data => {
+            const ctx = document.getElementById('productsChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: data.labels,
+                    datasets: [{
+                        data: data.values,
+                        backgroundColor: [
+                            '#0d6efd',
+                            '#198754',
+                            '#dc3545',
+                            '#ffc107',
+                            '#6610f2'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right'
+                        }
+                    }
+                }
+            });
+        });
+}
+
+function loadSlowMovingChart() {
+    fetch('/api/slow_moving_products')
+        .then(response => response.json())
+        .then(data => {
+            const ctx = document.getElementById('slowMovingChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.labels,
+                    datasets: [{
+                        label: 'Days Since Last Sale',
+                        data: data.values,
+                        backgroundColor: '#dc3545'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Days'
+                            }
+                        }
+                    }
+                }
+            });
+        });
+}
+
+function loadStockSalesRatioChart() {
+    fetch('/api/stock_sales_ratio')
+        .then(response => response.json())
+        .then(data => {
+            const ctx = document.getElementById('stockSalesRatioChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.labels,
+                    datasets: [{
+                        label: 'Stock-to-Sales Ratio',
+                        data: data.values,
+                        borderColor: '#198754',
+                        tension: 0.1,
+                        fill: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Ratio'
+                            }
+                        }
+                    }
+                }
+            });
+        });
+}
+
+function loadInventoryAgingChart() {
+    fetch('/api/inventory_aging')
+        .then(response => response.json())
+        .then(data => {
+            const ctx = document.getElementById('inventoryAgingChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.labels,
+                    datasets: [{
+                        label: 'Products',
+                        data: data.values,
+                        backgroundColor: [
+                            '#0d6efd',
+                            '#6610f2',
+                            '#dc3545',
+                            '#ffc107'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Number of Products'
+                            }
+                        }
+                    }
+                }
+            });
+        });
+}
+
+function loadSalesForecastChart() {
+    fetch('/api/sales_forecast')
+        .then(response => response.json())
+        .then(data => {
+            const ctx = document.getElementById('salesForecastChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.labels,
+                    datasets: [{
+                        label: 'Actual Sales',
+                        data: data.actual_values,
+                        backgroundColor: '#0d6efd',
+                        order: 2
+                    },
+                    {
+                        label: 'Forecast',
+                        data: data.forecast_values,
+                        borderColor: '#ffc107',
+                        borderDash: [5, 5],
+                        type: 'line',
+                        order: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Sales Amount (₹)'
+                            }
+                        }
+                    }
+                }
+            });
+        });
+}
+</script>
+{% endblock %} 

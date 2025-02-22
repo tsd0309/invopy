@@ -1,0 +1,820 @@
+{% extends "base.html" %}
+
+{% block title %}{{ customer.name }} - Customer Details{% endblock %}
+
+{% block extra_css %}
+<style>
+    .customer-info {
+        background: var(--card-bg);
+        border-radius: 8px;
+        box-shadow: var(--shadow-sm);
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .info-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.5rem 0;
+    }
+
+    .info-row .label {
+        font-size: 1rem;
+        color: var(--text-color);
+        font-weight: 500;
+    }
+
+    .info-row .value {
+        font-size: 1.25rem;
+        color: var(--text-color);
+        font-weight: 600;
+    }
+
+    .balance {
+        font-size: 1.25rem;
+        font-weight: bold;
+    }
+
+    .balance.positive {
+        color: var(--bs-danger);
+    }
+
+    .balance.negative {
+        color: var(--bs-success);
+    }
+
+    .balance.zero {
+        color: var(--bs-secondary);
+    }
+
+    .transaction-list {
+        margin-top: 1.5rem;
+    }
+
+    .transaction-item {
+        background: var(--card-bg);
+        border-radius: 8px;
+        box-shadow: var(--shadow-sm);
+        padding: 1rem;
+        margin-bottom: 1rem;
+        transition: var(--transition);
+    }
+
+    .transaction-item:hover {
+        box-shadow: var(--shadow);
+    }
+
+    .transaction-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.5rem;
+        gap: 1rem;
+    }
+
+    .transaction-type {
+        font-weight: 600;
+        font-size: 0.875rem;
+    }
+
+    .transaction-type.payment {
+        color: var(--bs-success);
+    }
+
+    .transaction-type.invoice {
+        color: var(--bs-primary);
+    }
+
+    .transaction-amount {
+        font-weight: bold;
+        font-size: 1rem;
+    }
+
+    .transaction-details {
+        font-size: 0.8125rem;
+        color: var(--text-color);
+        opacity: 0.8;
+    }
+
+    .transaction-date {
+        font-size: 0.75rem;
+        color: var(--text-color);
+        opacity: 0.7;
+    }
+
+    .nav-tabs {
+        margin-bottom: 1rem;
+    }
+
+    .tab-content {
+        background: var(--card-bg);
+        border-radius: 0 0 8px 8px;
+        padding: 1.5rem;
+        box-shadow: var(--shadow-sm);
+    }
+
+    .action-buttons {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 0.5rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .action-buttons .btn {
+        width: 100%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+        white-space: nowrap;
+        height: 38px;
+    }
+
+    .transaction-actions {
+        display: flex;
+        gap: 0.25rem;
+    }
+
+    .transaction-actions .btn {
+        padding: 0.25rem 0.5rem;
+    }
+
+    @media (max-width: 768px) {
+        .action-buttons {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-4">
+            <div class="customer-info">
+                <div class="info-row">
+                    <span class="label">Customer Name</span>
+                    <span class="value">{{ customer.name }}</span>
+                </div>
+                {% if customer.phone %}
+                <div class="info-row">
+                    <span class="label">Phone</span>
+                    <span class="value">{{ customer.phone }}</span>
+                </div>
+                {% endif %}
+                {% if customer.email %}
+                <div class="info-row">
+                    <span class="label">Email</span>
+                    <span class="value">{{ customer.email }}</span>
+                </div>
+                {% endif %}
+                {% if customer.address %}
+                <div class="info-row">
+                    <span class="label">Address</span>
+                    <span class="value">{{ customer.address }}</span>
+                </div>
+                {% endif %}
+                <div class="info-row">
+                    <span class="label">Total Invoices</span>
+                    <span class="value">{{ customer.invoices|length }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="label">Current Balance</span>
+                    <span class="value balance {% if customer.balance > 0 %}positive{% elif customer.balance < 0 %}negative{% else %}zero{% endif %}">
+                        ₹{{ "%.2f"|format(customer.balance|abs) }}
+                        {% if customer.balance > 0 %}
+                        (Due)
+                        {% elif customer.balance < 0 %}
+                        (Surplus)
+                        {% else %}
+                        (Settled)
+                        {% endif %}
+                    </span>
+                </div>
+            </div>
+
+            <div class="action-buttons">
+                <button class="btn btn-primary flex-fill" data-bs-toggle="modal" data-bs-target="#editCustomerModal">
+                    <i class="fas fa-edit"></i> Edit Details
+                </button>
+                <button class="btn btn-success flex-fill" data-bs-toggle="modal" data-bs-target="#addPaymentModal">
+                    <i class="fas fa-money-bill"></i> Add Payment
+                </button>
+                <button class="btn btn-warning flex-fill" data-bs-toggle="modal" data-bs-target="#linkInvoiceModal">
+                    <i class="fas fa-link"></i> Link Invoice
+                </button>
+                <button class="btn btn-danger flex-fill" data-bs-toggle="modal" data-bs-target="#addReceivableModal">
+                    <i class="fas fa-file-invoice-dollar"></i> Add Receivable
+                </button>
+            </div>
+        </div>
+
+        <div class="col-md-8">
+            <ul class="nav nav-tabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#transactions" type="button">
+                        Transaction History
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#invoices" type="button">
+                        Invoices
+                    </button>
+                </li>
+            </ul>
+
+            <div class="tab-content">
+                <div class="tab-pane fade show active" id="transactions">
+                    <div class="transaction-list">
+                        {% for transaction in transactions %}
+                        <div class="transaction-item">
+                            <div class="transaction-header">
+                                <span class="transaction-type {{ transaction.transaction_type }}">
+                                    {% if transaction.transaction_type == 'payment' %}
+                                    Payment Received
+                                    {% else %}
+                                    Refund Issued
+                                    {% endif %}
+                                </span>
+                                <div class="transaction-actions">
+                                    <button class="btn btn-sm btn-primary edit-transaction" data-id="{{ transaction.id }}" 
+                                            data-amount="{{ transaction.amount }}"
+                                            data-type="{{ transaction.transaction_type }}"
+                                            data-method="{{ transaction.payment_method }}"
+                                            data-reference="{{ transaction.reference_number }}"
+                                            data-notes="{{ transaction.notes }}">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-danger delete-transaction" data-id="{{ transaction.id }}">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                                <span class="transaction-amount">₹{{ "%.2f"|format(transaction.amount) }}</span>
+                            </div>
+                            <div class="transaction-details">
+                                <div>Method: {{ transaction.payment_method|title }}</div>
+                                {% if transaction.reference_number %}
+                                <div>Reference: {{ transaction.reference_number }}</div>
+                                {% endif %}
+                                {% if transaction.notes %}
+                                <div>Notes: {{ transaction.notes }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="transaction-date">
+                                {{ transaction.date.strftime('%Y-%m-%d %H:%M') }}
+                            </div>
+                        </div>
+                        {% endfor %}
+
+                        {% for receivable in customer.receivables %}
+                        <div class="transaction-item">
+                            <div class="transaction-header">
+                                <span class="transaction-type receivable">
+                                    {% if receivable.invoice %}
+                                    Linked Invoice #{{ receivable.invoice.order_number }}
+                                    {% else %}
+                                    Manual Receivable
+                                    {% endif %}
+                                </span>
+                                <div class="transaction-actions">
+                                    <button class="btn btn-sm btn-primary edit-receivable" data-id="{{ receivable.id }}"
+                                            data-amount="{{ receivable.amount }}"
+                                            data-additional="{{ receivable.additional_amount }}"
+                                            data-notes="{{ receivable.notes }}">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-danger delete-receivable" data-id="{{ receivable.id }}">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                                <span class="transaction-amount text-danger">
+                                    ₹{{ "%.2f"|format(receivable.amount + receivable.additional_amount) }}
+                                </span>
+                            </div>
+                            <div class="transaction-details">
+                                {% if receivable.invoice %}
+                                <div>Invoice Amount: ₹{{ "%.2f"|format(receivable.amount) }}</div>
+                                {% if receivable.additional_amount > 0 %}
+                                <div>Additional Amount: ₹{{ "%.2f"|format(receivable.additional_amount) }}</div>
+                                {% endif %}
+                                {% endif %}
+                                {% if receivable.notes %}
+                                <div>Notes: {{ receivable.notes }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="transaction-date">
+                                {{ receivable.date.strftime('%Y-%m-%d %H:%M') }}
+                            </div>
+                        </div>
+                        {% endfor %}
+
+                        {% if not transactions and not customer.receivables %}
+                        <p class="text-muted">No transactions found.</p>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="tab-pane fade" id="invoices">
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Invoice #</th>
+                                    <th>Date</th>
+                                    <th>Items</th>
+                                    <th>Amount</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for invoice in customer.invoices %}
+                                <tr>
+                                    <td>{{ invoice.order_number }}</td>
+                                    <td>{{ invoice.date.strftime('%Y-%m-%d') }}</td>
+                                    <td>{{ invoice.total_items }}</td>
+                                    <td>₹{{ "%.2f"|format(invoice.total_amount) }}</td>
+                                    <td>
+                                        <span class="badge bg-{{ 'success' if invoice.payment_status == 'paid' else 'warning' if invoice.payment_status == 'partial' else 'danger' }}">
+                                            {{ invoice.payment_status|title }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <a href="/invoices/{{ invoice.id }}/print" class="btn btn-sm btn-info" target="_blank">
+                                            <i class="fas fa-print"></i>
+                                        </a>
+                                        <a href="/new_invoice?edit={{ invoice.id }}" class="btn btn-sm btn-primary">
+                                            <i class="fas fa-edit"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="6" class="text-center">No invoices found.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Customer Modal -->
+<div class="modal fade" id="editCustomerModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit Customer</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editCustomerForm">
+                    <input type="hidden" name="id" value="{{ customer.id }}">
+                    <div class="mb-3">
+                        <label class="form-label">Name</label>
+                        <input type="text" class="form-control" name="name" value="{{ customer.name }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Phone</label>
+                        <input type="tel" class="form-control" name="phone" value="{{ customer.phone or '' }}">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Email</label>
+                        <input type="email" class="form-control" name="email" value="{{ customer.email or '' }}">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Address</label>
+                        <textarea class="form-control" name="address" rows="3">{{ customer.address or '' }}</textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="updateCustomer">Update Customer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Payment Modal -->
+<div class="modal fade" id="addPaymentModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Payment</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addPaymentForm">
+                    <input type="hidden" name="customer_id" value="{{ customer.id }}">
+                    <div class="mb-3">
+                        <label class="form-label">Amount</label>
+                        <input type="number" class="form-control" name="amount" step="0.01" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Payment Method</label>
+                        <select class="form-control" name="payment_method" required>
+                            <option value="cash">Cash</option>
+                            <option value="card">Card</option>
+                            <option value="upi">UPI</option>
+                            <option value="bank_transfer">Bank Transfer</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Reference Number</label>
+                        <input type="text" class="form-control" name="reference_number">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Notes</label>
+                        <textarea class="form-control" name="notes" rows="2"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="savePayment">Save Payment</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Link Invoice Modal -->
+<div class="modal fade" id="linkInvoiceModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Link Existing Invoice</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="linkInvoiceForm">
+                    <input type="hidden" name="customer_id" value="{{ customer.id }}">
+                    <div class="mb-3">
+                        <label class="form-label">Select Invoice</label>
+                        <select class="form-control" name="invoice_id" required>
+                            <option value="">Select an invoice...</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Additional Amount</label>
+                        <input type="number" class="form-control" name="additional_amount" step="0.01" value="0">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Notes</label>
+                        <textarea class="form-control" name="notes" rows="2"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="saveLinkInvoice">Link Invoice</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Receivable Modal -->
+<div class="modal fade" id="addReceivableModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Receivable Amount</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addReceivableForm">
+                    <input type="hidden" name="customer_id" value="{{ customer.id }}">
+                    <div class="mb-3">
+                        <label class="form-label">Amount</label>
+                        <input type="number" class="form-control" name="amount" step="0.01" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Notes</label>
+                        <textarea class="form-control" name="notes" rows="2" required></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="saveReceivable">Add Receivable</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Transaction Modal -->
+<div class="modal fade" id="editTransactionModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit Transaction</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editTransactionForm">
+                    <input type="hidden" name="transaction_id">
+                    <div class="mb-3">
+                        <label class="form-label">Amount</label>
+                        <input type="number" class="form-control" name="amount" step="0.01" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Payment Method</label>
+                        <select class="form-control" name="payment_method" required>
+                            <option value="cash">Cash</option>
+                            <option value="card">Card</option>
+                            <option value="upi">UPI</option>
+                            <option value="bank_transfer">Bank Transfer</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Reference Number</label>
+                        <input type="text" class="form-control" name="reference_number">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Notes</label>
+                        <textarea class="form-control" name="notes" rows="2"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="updateTransaction">Update Transaction</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Receivable Modal -->
+<div class="modal fade" id="editReceivableModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit Receivable</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editReceivableForm">
+                    <input type="hidden" name="receivable_id">
+                    <div class="mb-3">
+                        <label class="form-label">Amount</label>
+                        <input type="number" class="form-control" name="amount" step="0.01" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Additional Amount</label>
+                        <input type="number" class="form-control" name="additional_amount" step="0.01" value="0">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Notes</label>
+                        <textarea class="form-control" name="notes" rows="2" required></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="updateReceivable">Update Receivable</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Update Customer
+    document.getElementById('updateCustomer').addEventListener('click', function() {
+        const form = document.getElementById('editCustomerForm');
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+        const id = data.id;
+        
+        fetch(`/customers/${id}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Error updating customer: ' + data.error);
+            }
+        });
+    });
+
+    // Save Payment
+    document.getElementById('savePayment').addEventListener('click', function() {
+        const form = document.getElementById('addPaymentForm');
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+        
+        fetch('/customers/payment', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Error saving payment: ' + data.error);
+            }
+        });
+    });
+
+    // Load available invoices for linking
+    fetch('/invoices/list')
+        .then(response => response.json())
+        .then(data => {
+            const select = document.querySelector('#linkInvoiceForm select[name="invoice_id"]');
+            data.invoices.forEach(invoice => {
+                if (!invoice.customer_id) {  // Only show unlinked invoices
+                    const option = document.createElement('option');
+                    option.value = invoice.id;
+                    option.textContent = `#${invoice.order_number} - ₹${invoice.total_amount} (${invoice.date})`;
+                    select.appendChild(option);
+                }
+            });
+        });
+
+    // Link Invoice
+    document.getElementById('saveLinkInvoice').addEventListener('click', function() {
+        const form = document.getElementById('linkInvoiceForm');
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+        
+        fetch(`/customers/${data.customer_id}/link-invoice`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Error linking invoice: ' + data.error);
+            }
+        });
+    });
+
+    // Add Receivable
+    document.getElementById('saveReceivable').addEventListener('click', function() {
+        const form = document.getElementById('addReceivableForm');
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+        
+        fetch(`/customers/${data.customer_id}/receivable`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Error adding receivable: ' + data.error);
+            }
+        });
+    });
+
+    // Edit Transaction
+    document.querySelectorAll('.edit-transaction').forEach(button => {
+        button.addEventListener('click', function() {
+            const form = document.getElementById('editTransactionForm');
+            const modal = new bootstrap.Modal(document.getElementById('editTransactionModal'));
+            
+            form.querySelector('[name="transaction_id"]').value = this.dataset.id;
+            form.querySelector('[name="amount"]').value = this.dataset.amount;
+            form.querySelector('[name="payment_method"]').value = this.dataset.method;
+            form.querySelector('[name="reference_number"]').value = this.dataset.reference;
+            form.querySelector('[name="notes"]').value = this.dataset.notes;
+            
+            modal.show();
+        });
+    });
+
+    // Update Transaction
+    document.getElementById('updateTransaction').addEventListener('click', function() {
+        const form = document.getElementById('editTransactionForm');
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+        const id = data.transaction_id;
+        
+        fetch(`/customers/transaction/${id}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Error updating transaction: ' + data.error);
+            }
+        });
+    });
+
+    // Delete Transaction
+    document.querySelectorAll('.delete-transaction').forEach(button => {
+        button.addEventListener('click', function() {
+            if (confirm('Are you sure you want to delete this transaction?')) {
+                const id = this.dataset.id;
+                
+                fetch(`/customers/transaction/${id}`, {
+                    method: 'DELETE'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        location.reload();
+                    } else {
+                        alert('Error deleting transaction: ' + data.error);
+                    }
+                });
+            }
+        });
+    });
+
+    // Edit Receivable
+    document.querySelectorAll('.edit-receivable').forEach(button => {
+        button.addEventListener('click', function() {
+            const form = document.getElementById('editReceivableForm');
+            const modal = new bootstrap.Modal(document.getElementById('editReceivableModal'));
+            
+            form.querySelector('[name="receivable_id"]').value = this.dataset.id;
+            form.querySelector('[name="amount"]').value = this.dataset.amount;
+            form.querySelector('[name="additional_amount"]').value = this.dataset.additional;
+            form.querySelector('[name="notes"]').value = this.dataset.notes;
+            
+            modal.show();
+        });
+    });
+
+    // Update Receivable
+    document.getElementById('updateReceivable').addEventListener('click', function() {
+        const form = document.getElementById('editReceivableForm');
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+        const id = data.receivable_id;
+        
+        fetch(`/customers/receivable/${id}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Error updating receivable: ' + data.error);
+            }
+        });
+    });
+
+    // Delete Receivable
+    document.querySelectorAll('.delete-receivable').forEach(button => {
+        button.addEventListener('click', function() {
+            if (confirm('Are you sure you want to delete this receivable?')) {
+                const id = this.dataset.id;
+                
+                fetch(`/customers/receivable/${id}`, {
+                    method: 'DELETE'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        location.reload();
+                    } else {
+                        alert('Error deleting receivable: ' + data.error);
+                    }
+                });
+            }
+        });
+    });
+});
+</script>
+{% endblock %} 
