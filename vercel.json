@@ -29,21 +29,10 @@
         "CACHE_DEFAULT_TIMEOUT": "300"
     },
     "regions": ["all"],
-    "functions": {
-        "api/*.py": {
-            "memory": 1024,
-            "maxDuration": 10
-        }
-    },
     "crons": [
         {
             "path": "/api/cleanup-cache",
             "schedule": "0 0 * * *"
         }
-    ],
-    "build": {
-        "env": {
-            "PIP_TARGET": ".pip"
-        }
-    }
+    ]
 } 
