@@ -28,7 +28,7 @@
         "CACHE_DIR": "/tmp/flask_cache",
         "CACHE_DEFAULT_TIMEOUT": "300"
     },
-    "regions": ["all"],
+    "regions": ["iad1"],
     "crons": [
         {
             "path": "/api/cleanup-cache",
