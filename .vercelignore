@@ -1,0 +1,61 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Development files
+.git/
+.gitignore
+README.md
+tests/
+*.test.py
+*.pyc
+
+# Local environment
+.env.local
+.env.development
+node_modules/
+
+# Cache and logs
+flask_cache/
+*.log
+logs/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Database
+*.db
+*.sqlite3
+
+# Documentation
+docs/
+*.md
+
+# Test files
+test/
+tests/
+*.test.*
+*.spec.* 
