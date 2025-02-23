@@ -1748,7 +1748,10 @@ def login():
             
             session['user_id'] = user.id
             session['logged_in'] = True
-            return redirect(url_for('index'))
+            
+            # Redirect to the originally requested URL if it exists
+            next_url = session.pop('next', None)
+            return redirect(next_url or url_for('index'))
         else:
             flash('Invalid username or password')
             return redirect(url_for('login'))
@@ -1763,11 +1766,28 @@ def logout():
 @app.before_request
 def require_login():
     # List of routes that don't require login
-    public_routes = ['login', 'static']
+    public_routes = [
+        'login',
+        'static',
+        'manifest.json',
+        'sw.js',
+        'serve_icon',
+        None  # For the root route '/'
+    ]
     
+    # Check if the request is for static files
+    if request.path.startswith('/static/'):
+        return None
+        
+    # Allow OPTIONS requests (for CORS)
+    if request.method == 'OPTIONS':
+        return None
+        
     # Check if the requested endpoint is in public routes
-    if request.endpoint and request.endpoint not in public_routes:
-        if 'logged_in' not in session:
+    if request.endpoint not in public_routes:
+        if not session.get('logged_in'):
+            # Store the requested URL for redirecting after login
+            session['next'] = request.url
             return redirect(url_for('login'))
 
 @app.route('/users')
