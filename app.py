@@ -3,8 +3,6 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from datetime import datetime, date, timedelta
 import os
-from dotenv import load_dotenv
-from cache_config import cache, invalidate_product_cache, invalidate_user_cache, invalidate_invoice_cache, invalidate_customer_cache
 import io
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
@@ -20,25 +18,19 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 from pyotp import random_base32, TOTP
 import traceback
-
-# Load environment variables
-load_dotenv()
+import sqlite3
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', os.urandom(24))
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', os.urandom(24))
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///inventory.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# Configure SQLAlchemy for PostgreSQL
-app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-    'pool_size': 5,
-    'max_overflow': 10,
-    'pool_timeout': 30,
-    'pool_recycle': 1800,
-}
-
-# Initialize cache
-cache.init_app(app)
+# Production specific settings
+if os.environ.get('FLASK_ENV') == 'production':
+    app.config['SESSION_COOKIE_SECURE'] = True
+    app.config['SESSION_COOKIE_HTTPONLY'] = True
+    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+    app.config['PREFERRED_URL_SCHEME'] = 'https'
 
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
@@ -187,7 +179,7 @@ user_permissions = db.Table('user_permissions',
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
-    password = db.Column(db.String(255), nullable=False)  # Increased from 120 to 255
+    password = db.Column(db.String(120), nullable=False)
     role = db.Column(db.String(20), nullable=False, default='user')
     totp_secret = db.Column(db.String(32))
     totp_enabled = db.Column(db.Boolean, default=False)
@@ -491,7 +483,6 @@ def index():
 
 @app.route('/products/search')
 @login_required
-@cache.memoize(timeout=60)  # Cache search results for 1 minute
 def search_products():
     query = request.args.get('q', '').lower()
     # Split the query into words and remove empty strings
@@ -523,66 +514,132 @@ def search_products():
     
     return jsonify([product.serialize for product in filtered_products])
 
-@app.route('/products')
+@app.route('/products', methods=['GET', 'POST'])
 @login_required
 @permission_required('view_products')
-@cache.cached(timeout=300, key_prefix='all_products')
 def products():
-    products = Product.query.all()
+    if request.method == 'POST':
+        # Check if user has edit permission
+        current_user = User.query.get(session['user_id'])
+        if not (current_user.role == 'admin' or current_user.has_permission('edit_products')):
+            return jsonify({'success': False, 'error': 'Permission denied'})
+            
+        data = request.json
+        
+        # Server-side validation
+        if not all(key in data for key in ('item_code', 'description', 'uom', 'price')):
+            return jsonify({'success': False, 'error': 'Missing required data'})
+        
+        try:
+            # Convert and validate numeric fields
+            try:
+                price = float(data['price'])
+                stock = int(data.get('stock', 0))
+                restock_level = int(data.get('restock_level', 0))
+            except ValueError as e:
+                return jsonify({'success': False, 'error': f'Invalid numeric value: {str(e)}'})
+            
+            # Create new product
+            product = Product(
+                item_code=data['item_code'],
+                description=data['description'],
+                tamil_name=data.get('tamil_name', ''),
+                uom=data['uom'],
+                price=price,
+                stock=stock,
+                restock_level=restock_level,
+                stock_locations=data.get('stock_locations', ''),
+                tags=data.get('tags', ''),
+                notes=data.get('notes', '')
+            )
+            
+            db.session.add(product)
+            db.session.commit()
+            return jsonify({'success': True})
+            
+        except IntegrityError:
+            db.session.rollback()
+            return jsonify({'success': False, 'error': 'Item code already exists'})
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'success': False, 'error': str(e)})
+    
+    # Get current user for permission checks in template
     current_user = User.query.get(session['user_id'])
+    products = Product.query.all()
     return render_template('products.html', products=products, current_user=current_user)
-
-@app.route('/products/<int:id>')
-@login_required
-@cache.memoize(300)
-def get_product(id):
-    product = Product.query.get_or_404(id)
-    return jsonify(product.serialize)
-
-@app.route('/products', methods=['POST'])
-@login_required
-def add_product():
-    data = request.json
-    try:
-        product = Product(
-            item_code=data['item_code'],
-            description=data['description'],
-            tamil_name=data.get('tamil_name', ''),
-            uom=data['uom'],
-            price=float(data['price']),
-            stock=int(data.get('stock', 0)),
-            restock_level=int(data.get('restock_level', 0)),
-            stock_locations=data.get('stock_locations', ''),
-            tags=data.get('tags', ''),
-            notes=data.get('notes', '')
-        )
-        db.session.add(product)
-        db.session.commit()
-        
-        # Invalidate cache
-        invalidate_product_cache()
-        
-        return jsonify({'success': True, 'id': product.id})
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/products/<int:id>', methods=['PUT'])
 @login_required
 def update_product(id):
     product = Product.query.get_or_404(id)
     data = request.json
+    current_user = User.query.get(session['user_id'])
+    
     try:
-        # Update product fields
-        for key, value in data.items():
-            setattr(product, key, value)
+        # Check permissions for each field that is being updated
+        if 'item_code' in data and not (current_user.role == 'admin' or current_user.has_permission('edit_product_code')):
+            return jsonify({'success': False, 'error': 'Permission denied: Cannot edit item code'})
+            
+        if 'description' in data and not (current_user.role == 'admin' or current_user.has_permission('edit_product_description')):
+            return jsonify({'success': False, 'error': 'Permission denied: Cannot edit description'})
+            
+        if 'tamil_name' in data and not (current_user.role == 'admin' or current_user.has_permission('edit_product_tamil')):
+            return jsonify({'success': False, 'error': 'Permission denied: Cannot edit Tamil name'})
+            
+        if 'uom' in data and not (current_user.role == 'admin' or current_user.has_permission('edit_product_uom')):
+            return jsonify({'success': False, 'error': 'Permission denied: Cannot edit UOM'})
+            
+        if 'price' in data and not (current_user.role == 'admin' or current_user.has_permission('edit_product_price')):
+            return jsonify({'success': False, 'error': 'Permission denied: Cannot edit price'})
+            
+        if 'stock' in data and not (current_user.role == 'admin' or current_user.has_permission('edit_product_stock')):
+            return jsonify({'success': False, 'error': 'Permission denied: Cannot edit stock'})
+            
+        if 'restock_level' in data and not (current_user.role == 'admin' or current_user.has_permission('edit_product_restock')):
+            return jsonify({'success': False, 'error': 'Permission denied: Cannot edit restock level'})
+            
+        if 'stock_locations' in data and not (current_user.role == 'admin' or current_user.has_permission('edit_product_locations')):
+            return jsonify({'success': False, 'error': 'Permission denied: Cannot edit locations'})
+            
+        if 'tags' in data and not (current_user.role == 'admin' or current_user.has_permission('edit_product_tags')):
+            return jsonify({'success': False, 'error': 'Permission denied: Cannot edit tags'})
+            
+        if 'notes' in data and not (current_user.role == 'admin' or current_user.has_permission('edit_product_notes')):
+            return jsonify({'success': False, 'error': 'Permission denied: Cannot edit notes'})
+        
+        # Update only the fields that are present in the request data and user has permission for
+        if 'item_code' in data and (current_user.role == 'admin' or current_user.has_permission('edit_product_code')):
+            product.item_code = data['item_code']
+            
+        if 'description' in data and (current_user.role == 'admin' or current_user.has_permission('edit_product_description')):
+            product.description = data['description']
+            
+        if 'tamil_name' in data and (current_user.role == 'admin' or current_user.has_permission('edit_product_tamil')):
+            product.tamil_name = data['tamil_name']
+            
+        if 'uom' in data and (current_user.role == 'admin' or current_user.has_permission('edit_product_uom')):
+            product.uom = data['uom']
+            
+        if 'price' in data and (current_user.role == 'admin' or current_user.has_permission('edit_product_price')):
+            product.price = float(data['price'])
+            
+        if 'stock' in data and (current_user.role == 'admin' or current_user.has_permission('edit_product_stock')):
+            product.stock = int(data['stock'])
+            
+        if 'restock_level' in data and (current_user.role == 'admin' or current_user.has_permission('edit_product_restock')):
+            product.restock_level = int(data['restock_level'])
+            
+        if 'stock_locations' in data and (current_user.role == 'admin' or current_user.has_permission('edit_product_locations')):
+            product.stock_locations = data['stock_locations']
+            
+        if 'tags' in data and (current_user.role == 'admin' or current_user.has_permission('edit_product_tags')):
+            product.tags = data['tags']
+            
+        if 'notes' in data and (current_user.role == 'admin' or current_user.has_permission('edit_product_notes')):
+            product.notes = data['notes']
         
         db.session.commit()
-        
-        # Invalidate cache
-        invalidate_product_cache(id)
-        invalidate_product_cache()
-        
         return jsonify({'success': True})
     except Exception as e:
         db.session.rollback()
@@ -592,9 +649,10 @@ def update_product(id):
 @login_required
 def product(id):
     product = Product.query.get_or_404(id)
+    user = User.query.get(session['user_id'])  # Get current user
     
     if request.method == 'DELETE':
-        if not current_user.has_permission('delete_products'):
+        if not user.has_permission('delete_products'):
             return jsonify({'success': False, 'error': 'Permission denied'})
             
         try:
@@ -1377,6 +1435,9 @@ def delete_all():
     try:
         _delete_all_products()  # This also deletes invoices
         PrintTemplate.query.delete()
+        CustomerTransaction.query.delete()
+        CustomerReceivable.query.delete()
+        Customer.query.delete()
         settings = Settings.query.first()
         if settings:
             settings.calculator_code = '9999'
@@ -2829,14 +2890,11 @@ def save_invoice():
     # Change the redirect from /invoices to /new_invoice
     return redirect(url_for('new_invoice'))
 
-@app.route('/api/cleanup-cache', methods=['GET', 'POST'])
-def cleanup_cache():
-    try:
-        # Clear all cache
-        cache.clear()
-        return jsonify({'success': True, 'message': 'Cache cleared successfully'})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+# Add this function for database connection
+def get_db_connection():
+    conn = sqlite3.connect('instance/inventory.db')
+    conn.row_factory = sqlite3.Row
+    return conn
 
 if __name__ == '__main__':
     init_db()  # Initialize database with sample data

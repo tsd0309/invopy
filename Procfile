@@ -1,1 +1,1 @@
-web: gunicorn wsgi:app --config gunicorn_config.py 
+web: gunicorn wsgi:app --workers 4 --worker-class uvicorn.workers.UvicornWorker 
