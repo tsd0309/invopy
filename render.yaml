@@ -8,9 +8,10 @@ services:
       - key: PYTHON_VERSION
         value: 3.11.0
       - key: DATABASE_URL
-        fromDatabase:
-          name: neon
-          property: connectionString
+        value: postgresql://neondb_owner:npg_SKJP7uqa6tlb@ep-shiny-fire-a997p03r-pooler.gwc.azure.neon.tech/neondb?sslmode=require
+      - key: SQLALCHEMY_DATABASE_URI
+        sync: false
+        value: postgresql://neondb_owner:npg_SKJP7uqa6tlb@ep-shiny-fire-a997p03r-pooler.gwc.azure.neon.tech/neondb?sslmode=require
       - key: SECRET_KEY
         generateValue: true
     autoDeploy: true 
