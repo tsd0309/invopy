@@ -121,10 +121,16 @@
 {% block content %}
 <div class="card">
     <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div>
+        <div class="flex-grow-1">
             <h5 class="mb-0">Products List</h5>
             <div class="mt-2">
-                <input type="text" id="productSearch" class="form-control" placeholder="Search products...">
+                <div class="input-group">
+                    <input type="text" id="productSearch" class="form-control" placeholder="Search by item code, name, location, tags...">
+                    <button class="btn btn-outline-secondary" type="button" id="searchHelp" data-bs-toggle="popover" data-bs-placement="bottom">
+                        <i class="fas fa-question-circle"></i>
+                    </button>
+                </div>
+                <small class="text-muted">Press Enter to search across all products</small>
             </div>
         </div>
         <div class="d-flex gap-2 flex-wrap">
@@ -135,10 +141,10 @@
             {% endif %}
             
             {% if current_user.role == 'admin' or current_user.has_permission('import_products') %}
-            <button type="button" class="btn btn-success" onclick="document.getElementById('importFile').click()">
+            <button type="button" class="btn btn-success" id="importButton">
                 <i class="fas fa-file-import"></i> Import
             </button>
-            <input type="file" id="importFile" style="display: none" accept=".xlsx,.xls">
+            <input type="file" id="importFile" style="display: none" accept=".xlsx,.xls" onchange="handleImport(this)">
             {% endif %}
             
             {% if current_user.role == 'admin' or current_user.has_permission('export_products') %}
@@ -153,145 +159,212 @@
             <input type="file" id="import-excel" accept=".xlsx,.xls,.csv" onchange="handleImport(this)">
         </form>
 
-        <div class="product-grid">
-            {% for product in products %}
-            <div class="product-card" data-id="{{ product.id }}">
-                {% if current_user.role == 'admin' or current_user.has_permission('view_product_code') %}
-                <div class="card-row">
-                    <span class="label">Item Code</span>
-                    <span class="value">{{ product.item_code }}</span>
-                </div>
-                {% endif %}
-                
-                {% if current_user.role == 'admin' or current_user.has_permission('view_product_description') %}
-                <div class="card-row">
-                    <span class="label">Description</span>
-                    <span class="value">{{ product.description }}</span>
-                </div>
-                {% endif %}
-                
-                {% if current_user.role == 'admin' or current_user.has_permission('view_product_tamil') %}
-                {% if product.tamil_name %}
-                <div class="card-row">
-                    <span class="label">Tamil Name</span>
-                    <span class="value">{{ product.tamil_name }}</span>
-                </div>
-                {% endif %}
-                {% endif %}
-                
-                {% if current_user.role == 'admin' or current_user.has_permission('view_product_uom') %}
-                <div class="card-row">
-                    <span class="label">UOM</span>
-                    <span class="value">{{ product.uom }}</span>
-                </div>
-                {% endif %}
-                
-                {% if current_user.role == 'admin' or current_user.has_permission('view_product_price') %}
-                <div class="card-row">
-                    <span class="label">Price</span>
-                    <span class="value">₹{{ product.price }}</span>
-                </div>
-                {% endif %}
-                
-                {% if current_user.role == 'admin' or current_user.has_permission('view_product_stock') %}
-                <div class="card-row">
-                    <span class="label">Stock</span>
-                    <span class="value">{{ product.stock }}</span>
-                </div>
-                {% endif %}
-                
-                {% if current_user.role == 'admin' or current_user.has_permission('view_product_restock') %}
-                <div class="card-row">
-                    <span class="label">Restock Level</span>
-                    <span class="value">{{ product.restock_level }}</span>
-                </div>
-                {% endif %}
-                
-                {% if current_user.role == 'admin' or current_user.has_permission('view_product_locations') %}
-                {% if product.stock_locations %}
-                <div class="card-row">
-                    <span class="label">Locations</span>
-                    <span class="value">
-                        {% for location in product.stock_locations.split(',') %}
-                        <span class="badge bg-info me-1">{{ location.strip() }}</span>
-                        {% endfor %}
-                    </span>
-                </div>
-                {% endif %}
-                {% endif %}
-                
-                {% if current_user.role == 'admin' or current_user.has_permission('view_product_tags') %}
-                {% if product.tags %}
-                <div class="card-row">
-                    <span class="label">Tags</span>
-                    <span class="value">
-                        {% for tag in product.tags.split(',') %}
-                        <span class="badge bg-secondary me-1">{{ tag.strip() }}</span>
-                        {% endfor %}
-                    </span>
-                </div>
-                {% endif %}
-                {% endif %}
-                
-                {% if current_user.role == 'admin' or current_user.has_permission('view_product_notes') %}
-                {% if product.notes %}
-                <div class="card-row">
-                    <span class="label">Notes</span>
-                    <span class="value notes-text">{{ product.notes }}</span>
-                </div>
-                {% endif %}
-                {% endif %}
+        <div id="searchResults" style="display: none;">
+            <h6 class="border-bottom pb-2">Search Results</h6>
+            <div id="searchResultsGrid" class="product-grid">
+            </div>
+            <button class="btn btn-secondary mt-3" onclick="clearSearch()">Clear Search</button>
+        </div>
 
-                {% if current_user.role == 'admin' or current_user.has_permission('view_product_suppliers') %}
-                {% if product.suppliers %}
-                <div class="card-row">
-                    <span class="label">Supplied By</span>
-                    <span class="value">
-                        {% for supplier in product.suppliers %}
-                        <span class="badge bg-primary me-1">{{ supplier.name }}</span>
-                        {% endfor %}
-                    </span>
-                </div>
-                {% endif %}
-                {% endif %}
-                
-                {% if current_user.role == 'admin' or current_user.has_permission('manage_stock') %}
-                <div class="stock-controls">
-                    <button class="btn btn-outline-danger quick-stock-dec" data-id="{{ product.id }}">
-                        <i class="fas fa-minus"></i>
-                    </button>
-                    <button class="btn btn-outline-success quick-stock-inc" data-id="{{ product.id }}">
-                        <i class="fas fa-plus"></i>
-                    </button>
-                </div>
-                {% endif %}
-                
-                <div class="actions">
-                    {% if current_user.role == 'admin' or current_user.has_permission('edit_products') %}
-                    <button class="btn btn-primary edit-product" 
-                            data-id="{{ product.id }}"
-                            data-code="{{ product.item_code }}"
-                            data-description="{{ product.description }}"
-                            data-tamil-name="{{ product.tamil_name or '' }}"
-                            data-uom="{{ product.uom }}"
-                            data-price="{{ product.price }}"
-                            data-stock="{{ product.stock }}"
-                            data-restock-level="{{ product.restock_level }}"
-                            data-stock-locations="{{ product.stock_locations or '' }}"
-                            data-tags="{{ product.tags or '' }}"
-                            data-notes="{{ product.notes or '' }}">
-                        <i class="fas fa-edit"></i> Edit
-                    </button>
+        <div id="regularContent">
+            <div class="product-grid">
+                {% for product in products %}
+                <div class="product-card" data-id="{{ product.id }}">
+                    {% if current_user.role == 'admin' or current_user.has_permission('view_product_code') %}
+                    <div class="card-row">
+                        <span class="label">Item Code</span>
+                        <span class="value">{{ product.item_code }}</span>
+                    </div>
                     {% endif %}
                     
-                    {% if current_user.role == 'admin' or current_user.has_permission('delete_products') %}
-                    <button class="btn btn-danger delete-product" data-id="{{ product.id }}">
-                        <i class="fas fa-trash"></i> Delete
-                    </button>
+                    {% if current_user.role == 'admin' or current_user.has_permission('view_product_description') %}
+                    <div class="card-row">
+                        <span class="label">Description</span>
+                        <span class="value">{{ product.description }}</span>
+                    </div>
                     {% endif %}
+                    
+                    {% if current_user.role == 'admin' or current_user.has_permission('view_product_tamil') %}
+                    {% if product.tamil_name %}
+                    <div class="card-row">
+                        <span class="label">Tamil Name</span>
+                        <span class="value">{{ product.tamil_name }}</span>
+                    </div>
+                    {% endif %}
+                    {% endif %}
+                    
+                    {% if current_user.role == 'admin' or current_user.has_permission('view_product_uom') %}
+                    <div class="card-row">
+                        <span class="label">UOM</span>
+                        <span class="value">{{ product.uom }}</span>
+                    </div>
+                    {% endif %}
+                    
+                    {% if current_user.role == 'admin' or current_user.has_permission('view_product_price') %}
+                    <div class="card-row">
+                        <span class="label">Price</span>
+                        <span class="value">₹{{ product.price }}</span>
+                    </div>
+                    {% endif %}
+                    
+                    {% if current_user.role == 'admin' or current_user.has_permission('view_product_stock') %}
+                    <div class="card-row">
+                        <span class="label">Stock</span>
+                        <span class="value">{{ product.stock }}</span>
+                    </div>
+                    {% endif %}
+                    
+                    {% if current_user.role == 'admin' or current_user.has_permission('view_product_restock') %}
+                    <div class="card-row">
+                        <span class="label">Restock Level</span>
+                        <span class="value">{{ product.restock_level }}</span>
+                    </div>
+                    {% endif %}
+                    
+                    {% if current_user.role == 'admin' or current_user.has_permission('view_product_locations') %}
+                    {% if product.stock_locations %}
+                    <div class="card-row">
+                        <span class="label">Locations</span>
+                        <span class="value">
+                            {% for location in product.stock_locations.split(',') %}
+                            <span class="badge bg-info me-1">{{ location.strip() }}</span>
+                            {% endfor %}
+                        </span>
+                    </div>
+                    {% endif %}
+                    {% endif %}
+                    
+                    {% if current_user.role == 'admin' or current_user.has_permission('view_product_tags') %}
+                    {% if product.tags %}
+                    <div class="card-row">
+                        <span class="label">Tags</span>
+                        <span class="value">
+                            {% for tag in product.tags.split(',') %}
+                            <span class="badge bg-secondary me-1">{{ tag.strip() }}</span>
+                            {% endfor %}
+                        </span>
+                    </div>
+                    {% endif %}
+                    {% endif %}
+                    
+                    {% if current_user.role == 'admin' or current_user.has_permission('view_product_notes') %}
+                    {% if product.notes %}
+                    <div class="card-row">
+                        <span class="label">Notes</span>
+                        <span class="value notes-text">{{ product.notes }}</span>
+                    </div>
+                    {% endif %}
+                    {% endif %}
+
+                    {% if current_user.role == 'admin' or current_user.has_permission('view_product_suppliers') %}
+                    {% if product.suppliers %}
+                    <div class="card-row">
+                        <span class="label">Supplied By</span>
+                        <span class="value">
+                            {% for supplier in product.suppliers %}
+                            <span class="badge bg-primary me-1">{{ supplier.name }}</span>
+                            {% endfor %}
+                        </span>
+                    </div>
+                    {% endif %}
+                    {% endif %}
+                    
+                    {% if current_user.role == 'admin' or current_user.has_permission('manage_stock') %}
+                    <div class="stock-controls">
+                        <button class="btn btn-outline-danger quick-stock-dec" data-id="{{ product.id }}">
+                            <i class="fas fa-minus"></i>
+                        </button>
+                        <button class="btn btn-outline-success quick-stock-inc" data-id="{{ product.id }}">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                    </div>
+                    {% endif %}
+                    
+                    <div class="actions">
+                        {% if current_user.role == 'admin' or current_user.has_permission('edit_products') %}
+                        <button class="btn btn-primary edit-product" 
+                                data-id="{{ product.id }}"
+                                data-code="{{ product.item_code }}"
+                                data-description="{{ product.description }}"
+                                data-tamil-name="{{ product.tamil_name or '' }}"
+                                data-uom="{{ product.uom }}"
+                                data-price="{{ product.price }}"
+                                data-stock="{{ product.stock }}"
+                                data-restock-level="{{ product.restock_level }}"
+                                data-stock-locations="{{ product.stock_locations or '' }}"
+                                data-tags="{{ product.tags or '' }}"
+                                data-notes="{{ product.notes or '' }}">
+                            <i class="fas fa-edit"></i> Edit
+                        </button>
+                        {% endif %}
+                        
+                        {% if current_user.role == 'admin' or current_user.has_permission('delete_products') %}
+                        <button class="btn btn-danger delete-product" data-id="{{ product.id }}">
+                            <i class="fas fa-trash"></i> Delete
+                        </button>
+                        {% endif %}
+                    </div>
                 </div>
+                {% endfor %}
             </div>
-            {% endfor %}
+        </div>
+
+        <!-- Pagination -->
+        <div class="d-flex justify-content-between align-items-center mt-4">
+            <div class="text-muted">
+                Showing {{ products|length }} products
+            </div>
+            <nav aria-label="Product navigation">
+                <ul class="pagination mb-0">
+                    <!-- Previous page -->
+                    <li class="page-item {% if current_page == 1 %}disabled{% endif %}">
+                        <a class="page-link" href="{{ url_for('products', page=current_page-1) if current_page > 1 else '#' }}" aria-label="Previous">
+                            <span aria-hidden="true">&laquo;</span>
+                        </a>
+                    </li>
+                    
+                    <!-- First page -->
+                    {% if current_page > 3 %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('products', page=1) }}">1</a>
+                    </li>
+                    {% if current_page > 4 %}
+                    <li class="page-item disabled">
+                        <span class="page-link">...</span>
+                    </li>
+                    {% endif %}
+                    {% endif %}
+                    
+                    <!-- Page numbers -->
+                    {% for page_num in range(
+                        [1, current_page - 2]|max,
+                        [total_pages, current_page + 2]|min + 1
+                    ) %}
+                    <li class="page-item {% if page_num == current_page %}active{% endif %}">
+                        <a class="page-link" href="{{ url_for('products', page=page_num) }}">{{ page_num }}</a>
+                    </li>
+                    {% endfor %}
+                    
+                    <!-- Last page -->
+                    {% if current_page < total_pages - 2 %}
+                    {% if current_page < total_pages - 3 %}
+                    <li class="page-item disabled">
+                        <span class="page-link">...</span>
+                    </li>
+                    {% endif %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('products', page=total_pages) }}">{{ total_pages }}</a>
+                    </li>
+                    {% endif %}
+                    
+                    <!-- Next page -->
+                    <li class="page-item {% if current_page == total_pages %}disabled{% endif %}">
+                        <a class="page-link" href="{{ url_for('products', page=current_page+1) if current_page < total_pages else '#' }}" aria-label="Next">
+                            <span aria-hidden="true">&raquo;</span>
+                        </a>
+                    </li>
+                </ul>
+            </nav>
         </div>
 
         <!-- Keep the table for reference but hide it -->
@@ -618,32 +691,231 @@
     </div>
 </div>
 
+<!-- Import Progress Modal -->
+<div class="modal fade" id="importProgressModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Importing Products</h5>
+            </div>
+            <div class="modal-body">
+                <div class="progress mb-3">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 100%"></div>
+                </div>
+                <div id="importStatus" class="text-center mb-3">Processing your file...</div>
+                <div id="importDetails" class="mt-3">
+                    <div class="row text-center mb-3">
+                        <div class="col">
+                            <h6>Total Rows</h6>
+                            <span id="processedCount" class="h4">0</span>
+                        </div>
+                        <div class="col">
+                            <h6>Imported</h6>
+                            <span id="successCount" class="h4 text-success">0</span>
+                        </div>
+                        <div class="col">
+                            <h6>Failed</h6>
+                            <span id="errorCount" class="h4 text-danger">0</span>
+                        </div>
+                    </div>
+                    <div id="errorList" class="d-none">
+                        <h6 class="text-danger">Error Details:</h6>
+                        <div class="alert alert-danger">
+                            <ul class="mb-0" id="errorDetails"></ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" id="closeImportModal" style="display: none;">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block extra_js %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Search functionality
-    document.getElementById('productSearch').addEventListener('input', function(e) {
-        const searchText = e.target.value.toLowerCase();
-        const tableRows = document.querySelectorAll('tbody tr');
-        const productCards = document.querySelectorAll('.product-card');
-        
-        // Search in table rows (desktop view)
-        tableRows.forEach(row => {
-            const text = row.textContent.toLowerCase();
-            row.style.display = text.includes(searchText) ? '' : 'none';
-        });
-        
-        // Search in product cards (mobile view)
-        productCards.forEach(card => {
-            const text = card.textContent.toLowerCase();
-            card.style.display = text.includes(searchText) ? '' : 'none';
-        });
+    // Initialize popover
+    const searchHelp = document.getElementById('searchHelp');
+    new bootstrap.Popover(searchHelp, {
+        html: true,
+        title: 'Search Tips',
+        content: `
+            <ul class="list-unstyled mb-0">
+                <li>• Search by item code</li>
+                <li>• Search by product name</li>
+                <li>• Search by location</li>
+                <li>• Search by tags</li>
+                <li>• Search by UOM</li>
+                <li>• Words can be in any order</li>
+                <li>• Press Enter to search all products</li>
+            </ul>
+        `
     });
 
+    let searchTimeout;
+    const searchInput = document.getElementById('productSearch');
+    const searchResults = document.getElementById('searchResults');
+    const searchResultsGrid = document.getElementById('searchResultsGrid');
+    const regularContent = document.getElementById('regularContent');
+
+    searchInput.addEventListener('keyup', function(e) {
+        const query = this.value.trim();
+        
+        // Clear previous timeout
+        clearTimeout(searchTimeout);
+        
+        // If Enter is pressed, search immediately
+        if (e.key === 'Enter' && query) {
+            performSearch(query);
+            return;
+        }
+        
+        // For other keys, wait for user to stop typing
+        searchTimeout = setTimeout(() => {
+            if (query) {
+                performSearch(query);
+            } else {
+                clearSearch();
+            }
+        }, 300);
+    });
+
+    function performSearch(query) {
+        fetch(`/products/search?q=${encodeURIComponent(query)}`)
+            .then(response => response.json())
+            .then(products => {
+                if (products.length > 0) {
+                    displaySearchResults(products);
+                } else {
+                    searchResultsGrid.innerHTML = '<div class="text-center text-muted">No products found</div>';
+                    searchResults.style.display = 'block';
+                    regularContent.style.display = 'none';
+                }
+            });
+    }
+
+    function displaySearchResults(products) {
+        searchResultsGrid.innerHTML = products.map(product => `
+            <div class="product-card" data-id="${product.id}">
+                <div class="card-row">
+                    <span class="label">Item Code</span>
+                    <span class="value">${product.item_code}</span>
+                </div>
+                <div class="card-row">
+                    <span class="label">Description</span>
+                    <span class="value">${product.description}</span>
+                </div>
+                ${product.tamil_name ? `
+                <div class="card-row">
+                    <span class="label">Tamil Name</span>
+                    <span class="value">${product.tamil_name}</span>
+                </div>
+                ` : ''}
+                <div class="card-row">
+                    <span class="label">UOM</span>
+                    <span class="value">${product.uom}</span>
+                </div>
+                <div class="card-row">
+                    <span class="label">Price</span>
+                    <span class="value">₹${product.price}</span>
+                </div>
+                <div class="card-row">
+                    <span class="label">Stock</span>
+                    <span class="value">${product.stock}</span>
+                </div>
+                ${product.stock_locations_display ? `
+                <div class="card-row">
+                    <span class="label">Locations</span>
+                    <span class="value">
+                        ${product.stock_locations_display.split(',').map(loc => 
+                            `<span class="badge bg-info me-1">${loc.trim()}</span>`
+                        ).join('')}
+                    </span>
+                </div>
+                ` : ''}
+                ${product.tags_display ? `
+                <div class="card-row">
+                    <span class="label">Tags</span>
+                    <span class="value">
+                        ${product.tags_display.split(',').map(tag => 
+                            `<span class="badge bg-secondary me-1">${tag.trim()}</span>`
+                        ).join('')}
+                    </span>
+                </div>
+                ` : ''}
+                <div class="actions">
+                    <button class="btn btn-primary edit-product" 
+                            data-id="${product.id}"
+                            data-code="${product.item_code}"
+                            data-description="${product.description}"
+                            data-tamil-name="${product.tamil_name || ''}"
+                            data-uom="${product.uom}"
+                            data-price="${product.price}"
+                            data-stock="${product.stock}"
+                            data-restock-level="${product.restock_level}"
+                            data-stock-locations="${product.stock_locations_display}"
+                            data-tags="${product.tags_display}"
+                            data-notes="${product.notes_display}">
+                        <i class="fas fa-edit"></i> Edit
+                    </button>
+                    <button class="btn btn-danger delete-product" data-id="${product.id}">
+                        <i class="fas fa-trash"></i> Delete
+                    </button>
+                </div>
+            </div>
+        `).join('');
+
+        // Re-attach event listeners to the new elements
+        attachEventListeners();
+        
+        searchResults.style.display = 'block';
+        regularContent.style.display = 'none';
+    }
+
+    function clearSearch() {
+        searchInput.value = '';
+        searchResults.style.display = 'none';
+        regularContent.style.display = 'block';
+    }
+
+    function attachEventListeners() {
+        // Re-attach edit button listeners
+        document.querySelectorAll('.edit-product').forEach(button => {
+            button.removeEventListener('click', handleEditClick);
+            button.addEventListener('click', handleEditClick);
+        });
+
+        // Re-attach delete button listeners
+        document.querySelectorAll('.delete-product').forEach(button => {
+            button.removeEventListener('click', handleDeleteClick);
+            button.addEventListener('click', handleDeleteClick);
+        });
+    }
+
+    // Import button click handler
+    const importButton = document.getElementById('importButton');
+    const importFile = document.getElementById('importFile');
+    if (importButton) {
+        importButton.addEventListener('click', function() {
+            importFile.click();
+        });
+    }
+    
     // File Import Handler
+    const importProgressModal = new bootstrap.Modal(document.getElementById('importProgressModal'));
+    const importStatus = document.getElementById('importStatus');
+    const processedCount = document.getElementById('processedCount');
+    const successCount = document.getElementById('successCount');
+    const errorCount = document.getElementById('errorCount');
+    const errorList = document.getElementById('errorList');
+    const errorDetails = document.getElementById('errorDetails');
+    const closeImportModal = document.getElementById('closeImportModal');
+
     window.handleImport = function(input) {
         if (!input.files || !input.files[0]) return;
 
@@ -651,34 +923,92 @@ document.addEventListener('DOMContentLoaded', function() {
         const formData = new FormData();
         formData.append('file', file);
 
-        // Show loading state
-        const importBtn = document.querySelector('[onclick="document.getElementById(\'import-excel\').click()"]');
-        const originalText = importBtn.textContent;
-        importBtn.textContent = 'Importing...';
-        importBtn.disabled = true;
+        // Reset and show progress modal
+        processedCount.textContent = '0';
+        successCount.textContent = '0';
+        errorCount.textContent = '0';
+        errorList.classList.add('d-none');
+        errorDetails.innerHTML = '';
+        importStatus.textContent = 'Processing your file...';
+        closeImportModal.style.display = 'none';
+        importProgressModal.show();
 
         fetch('/products/import', {
             method: 'POST',
-            body: formData
+            body: formData,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
         })
         .then(response => response.json())
         .then(data => {
+            // Update counts
+            processedCount.textContent = data.total_count || '0';
+            successCount.textContent = data.imported_count || '0';
+            errorCount.textContent = data.error_count || '0';
+            
             if (data.success) {
-                alert(data.message || 'Products imported successfully');
-                location.reload();
+                importStatus.innerHTML = '<i class="fas fa-check-circle text-success"></i> Import completed successfully!';
+                
+                // Show any warnings or partial success messages
+                if (data.error_count > 0) {
+                    errorList.classList.remove('d-none');
+                    data.error_details.forEach(error => {
+                        const li = document.createElement('li');
+                        li.textContent = error;
+                        errorDetails.appendChild(li);
+                    });
+                }
+                
+                // Enable close button and auto-reload
+                closeImportModal.style.display = 'block';
+                closeImportModal.onclick = () => {
+                    importProgressModal.hide();
+                    location.reload();
+                };
+                
+                // Auto reload after 3 seconds if no errors
+                if (data.error_count === 0) {
+                    setTimeout(() => {
+                        importProgressModal.hide();
+                        location.reload();
+                    }, 3000);
+                }
             } else {
-                alert('Error importing products: ' + data.error);
+                importStatus.innerHTML = '<i class="fas fa-times-circle text-danger"></i> Import failed';
+                errorList.classList.remove('d-none');
+                
+                // Show error details
+                if (data.error_details && data.error_details.length > 0) {
+                    data.error_details.forEach(error => {
+                        const li = document.createElement('li');
+                        li.textContent = error;
+                        errorDetails.appendChild(li);
+                    });
+                } else {
+                    const li = document.createElement('li');
+                    li.textContent = data.error || 'Unknown error occurred';
+                    errorDetails.appendChild(li);
+                }
+                
+                // Enable close button
+                closeImportModal.style.display = 'block';
+                closeImportModal.onclick = () => importProgressModal.hide();
             }
         })
         .catch(error => {
             console.error('Error:', error);
-            alert('Error importing products. Please try again.');
+            importStatus.innerHTML = '<i class="fas fa-times-circle text-danger"></i> Import failed';
+            errorList.classList.remove('d-none');
+            const li = document.createElement('li');
+            li.textContent = 'Network error occurred. Please try again.';
+            errorDetails.appendChild(li);
+            closeImportModal.style.display = 'block';
+            closeImportModal.onclick = () => importProgressModal.hide();
         })
         .finally(() => {
-            // Reset input and button
+            // Reset file input
             input.value = '';
-            importBtn.textContent = originalText;
-            importBtn.disabled = false;
         });
     };
 
@@ -789,19 +1119,7 @@ document.addEventListener('DOMContentLoaded', function() {
         modal.show();
     }
 
-    // Attach edit listeners
-    document.querySelectorAll('.edit-product').forEach(button => {
-        button.addEventListener('click', handleEditClick);
-    });
-
     // Delete product (for both desktop and mobile)
-    function attachDeleteListeners() {
-        document.querySelectorAll('.delete-product').forEach(button => {
-            button.removeEventListener('click', handleDeleteClick);
-            button.addEventListener('click', handleDeleteClick);
-        });
-    }
-
     function handleDeleteClick() {
         if (confirm('Are you sure you want to delete this product?')) {
             const id = this.dataset.id;
@@ -819,9 +1137,6 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
     }
-
-    // Initial attachment of listeners
-    attachDeleteListeners();
 
     // Add the paste import handler
     document.getElementById('processPastedData').addEventListener('click', function() {

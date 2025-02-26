@@ -3,6 +3,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from datetime import datetime, date, timedelta
 import os
+from dotenv import load_dotenv
 import io
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
@@ -15,22 +16,64 @@ from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from werkzeug.security import generate_password_hash, check_password_hash
-from functools import wraps
+from functools import wraps, lru_cache
 from pyotp import random_base32, TOTP
 import traceback
-import sqlite3
+import psycopg2
+from psycopg2.extras import DictCursor
+
+# Load environment variables
+load_dotenv()
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', os.urandom(24))
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///inventory.db')
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', os.urandom(24))
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# Production specific settings
-if os.environ.get('FLASK_ENV') == 'production':
-    app.config['SESSION_COOKIE_SECURE'] = True
-    app.config['SESSION_COOKIE_HTTPONLY'] = True
-    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-    app.config['PREFERRED_URL_SCHEME'] = 'https'
+# Cache configuration
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 31536000  # 1 year
+app.config['STATIC_FOLDER'] = 'static'
+
+# Cache decorators
+def cache_for(seconds):
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            cache_key = f.__name__ + str(args) + str(kwargs)
+            cached_result = cache.get(cache_key)
+            if cached_result is not None:
+                return cached_result
+            result = f(*args, **kwargs)
+            cache.set(cache_key, result, timeout=seconds)
+            return result
+        return decorated_function
+    return decorator
+
+# Simple in-memory cache
+class SimpleCache:
+    def __init__(self):
+        self._cache = {}
+        
+    def get(self, key):
+        if key in self._cache:
+            item = self._cache[key]
+            if item['expires'] > datetime.utcnow():
+                return item['value']
+            else:
+                del self._cache[key]
+        return None
+        
+    def set(self, key, value, timeout=300):
+        self._cache[key] = {
+            'value': value,
+            'expires': datetime.utcnow() + timedelta(seconds=timeout)
+        }
+        
+    def delete(self, key):
+        if key in self._cache:
+            del self._cache[key]
+
+cache = SimpleCache()
 
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
@@ -179,7 +222,7 @@ user_permissions = db.Table('user_permissions',
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
-    password = db.Column(db.String(120), nullable=False)
+    password = db.Column(db.String(255), nullable=False)  # Increased length for hashed password
     role = db.Column(db.String(20), nullable=False, default='user')
     totp_secret = db.Column(db.String(32))
     totp_enabled = db.Column(db.Boolean, default=False)
@@ -427,26 +470,23 @@ def _delete_all_products():
 @app.route('/')
 @login_required
 def index():
+    cached_data = cache.get('dashboard_data')
+    if cached_data is not None:
+        return cached_data
+        
     # Get current user
     user = User.query.get(session['user_id'])
-    if not user:
-        return redirect(url_for('login'))
-
-    # Allow access for admin users or users with any permission
-    if not user.role == 'admin' and not user.permissions:
-        flash('You do not have permission to access this page')
-        return redirect(url_for('login'))
-
-    settings = Settings.query.first()
-    if not settings:
-        settings = Settings(calculator_code='9999')
-        db.session.add(settings)
-        db.session.commit()
-
-    wallpaper_url = url_for('static', filename=f'wallpapers/{settings.wallpaper_path}') if settings and settings.wallpaper_path else None
     
     # Get products that are at or below their restock level
     low_stock_products = Product.query.filter(Product.stock <= Product.restock_level).all()
+    
+    # Get recent invoices
+    recent_invoices = Invoice.query.order_by(Invoice.date.desc()).limit(5).all()
+    
+    response = render_template('index.html', 
+                             user=user,
+                             low_stock_products=low_stock_products,
+                             recent_invoices=recent_invoices)
     
     # Calculate total inventory cost
     total_inventory_cost = sum(product.stock * product.price for product in Product.query.all())
@@ -485,34 +525,49 @@ def index():
 @login_required
 def search_products():
     query = request.args.get('q', '').lower()
-    # Split the query into words and remove empty strings
     search_terms = [term.strip() for term in query.split() if term.strip()]
     
     if not search_terms:
         return jsonify([])
     
-    # Get all products
-    products = Product.query.all()
+    # Build the search query
+    search_query = Product.query
     
-    # Filter products based on search terms
-    filtered_products = []
-    for product in products:
-        description_lower = product.description.lower()
-        item_code_lower = product.item_code.lower()
+    # Search across multiple fields with OR conditions
+    search_conditions = []
+    for term in search_terms:
+        term_conditions = []
+        # Search in item_code
+        term_conditions.append(Product.item_code.ilike(f'%{term}%'))
+        # Search in description
+        term_conditions.append(Product.description.ilike(f'%{term}%'))
+        # Search in tamil_name
+        term_conditions.append(Product.tamil_name.ilike(f'%{term}%'))
+        # Search in stock_locations
+        term_conditions.append(Product.stock_locations.ilike(f'%{term}%'))
+        # Search in tags
+        term_conditions.append(Product.tags.ilike(f'%{term}%'))
+        # Search in notes
+        term_conditions.append(Product.notes.ilike(f'%{term}%'))
+        # Search in UOM
+        term_conditions.append(Product.uom.ilike(f'%{term}%'))
         
-        # Check if all search terms are present in either item code or description
-        matches = all(
-            term in description_lower.replace(' ', '') or 
-            term in item_code_lower.replace(' ', '') or
-            term in description_lower or
-            term in item_code_lower
-            for term in search_terms
-        )
-        
-        if matches:
-            filtered_products.append(product)
+        # Combine conditions for this term with OR
+        search_conditions.append(db.or_(*term_conditions))
     
-    return jsonify([product.serialize for product in filtered_products])
+    # Apply all term conditions with AND
+    search_query = search_query.filter(db.and_(*search_conditions))
+    
+    # Execute query and get results
+    products = search_query.order_by(Product.item_code).all()
+    
+    # Return serialized results with additional fields
+    return jsonify([{
+        **product.serialize,
+        'stock_locations_display': product.stock_locations or '',
+        'tags_display': product.tags or '',
+        'notes_display': product.notes or ''
+    } for product in products])
 
 @app.route('/products', methods=['GET', 'POST'])
 @login_required
@@ -566,8 +621,24 @@ def products():
     
     # Get current user for permission checks in template
     current_user = User.query.get(session['user_id'])
-    products = Product.query.all()
-    return render_template('products.html', products=products, current_user=current_user)
+    
+    # Pagination parameters
+    page = request.args.get('page', 1, type=int)
+    per_page = 50  # Number of items per page
+    
+    # Get total count for pagination
+    total_count = Product.query.count()
+    total_pages = (total_count + per_page - 1) // per_page
+    
+    # Get paginated products
+    products = Product.query.order_by(Product.item_code).paginate(page=page, per_page=per_page, error_out=False)
+    
+    return render_template('products.html', 
+                         products=products.items,
+                         current_user=current_user,
+                         pagination=products,
+                         total_pages=total_pages,
+                         current_page=page)
 
 @app.route('/products/<int:id>', methods=['PUT'])
 @login_required
@@ -846,169 +917,131 @@ def print_summary():
 @login_required
 @permission_required('import_products')
 def import_products():
-    if 'file' not in request.files:
-        return jsonify({'error': 'No file uploaded'}), 400
-
-    file = request.files['file']
-    if file.filename == '':
-        return jsonify({'error': 'No file selected'}), 400
-    
-    if not file.filename.endswith(('.xlsx', '.xls')):
-        return jsonify({'error': 'Invalid file format. Please upload an Excel file.'}), 400
-    
     try:
+        if 'file' not in request.files:
+            print("No file in request.files")  # Debug log
+            return jsonify({'success': False, 'error': 'No file uploaded'}), 400
+
+        file = request.files['file']
+        if file.filename == '':
+            print("Empty filename")  # Debug log
+            return jsonify({'success': False, 'error': 'No file selected'}), 400
+        
+        if not file.filename.endswith(('.xlsx', '.xls')):
+            print(f"Invalid file type: {file.filename}")  # Debug log
+            return jsonify({'success': False, 'error': 'Invalid file format. Please upload an Excel file.'}), 400
+        
+        print(f"Processing file: {file.filename}")  # Debug log
+        
         # Initialize counters and error list
+        total_count = 0
         imported_count = 0
-        error_rows = []
+        error_details = []
         products = []
         
-        # Read the Excel file
-        if file.filename.endswith('.xlsx'):
-            try:
-                wb = openpyxl.load_workbook(file, data_only=True)
-                sheet = wb.active
-                
-                # Validate header row
-                header_row = next(sheet.iter_rows(min_row=1, max_row=1))
-                if len(header_row) < 6:
-                    return jsonify({'error': 'Invalid file format. Missing required columns.'}), 400
-                
-                # Process data rows
-                for row_idx, row in enumerate(sheet.iter_rows(min_row=2), start=2):
-                    try:
-                        # Skip empty rows
-                        if not any(cell.value for cell in row):
-                            continue
-                            
-                        # Basic validation
-                        if not row[0].value or not row[1].value or not row[3].value:
-                            error_rows.append(f"Row {row_idx}: Missing required fields (Item Code, Description, or UOM)")
-                            continue
-                        
-                        # Handle price and stock
-                        try:
-                            price = float(str(row[4].value or '0').replace(',', ''))
-                            stock = int(float(str(row[5].value or '0').replace(',', '')))
-                        except (ValueError, TypeError):
-                            error_rows.append(f"Row {row_idx}: Invalid price or stock value")
-                            continue
-                        
-                        product = {
-                            'item_code': str(row[0].value).strip(),
-                            'description': str(row[1].value).strip(),
-                            'tamil_name': str(row[2].value).strip() if row[2].value else None,
-                            'uom': str(row[3].value).strip(),
-                            'price': price,
-                            'stock': stock,
-                            'restock_level': int(float(str(row[6].value or '0').replace(',', ''))),
-                            'stock_locations': str(row[7].value).strip() if len(row) > 7 and row[7].value else None,
-                            'tags': str(row[8].value).strip() if len(row) > 8 and row[8].value else None,
-                            'notes': str(row[9].value).strip() if len(row) > 9 and row[9].value else None
-                        }
-                        products.append(product)
-                    except Exception as e:
-                        error_rows.append(f"Row {row_idx}: {str(e)}")
+        try:
+            # Read the Excel file
+            wb = openpyxl.load_workbook(file, data_only=True)
+            sheet = wb.active
+            
+            # Validate header row
+            header_row = next(sheet.iter_rows(min_row=1, max_row=1))
+            if len(header_row) < 6:
+                print("Invalid header row")  # Debug log
+                return jsonify({'success': False, 'error': 'Invalid file format. Missing required columns.'}), 400
+            
+            # Process data rows
+            for row_idx, row in enumerate(sheet.iter_rows(min_row=2), start=2):
+                total_count += 1
+                try:
+                    # Skip empty rows
+                    if not any(cell.value for cell in row):
                         continue
                         
-            except Exception as e:
-                return jsonify({'error': f'Error reading Excel file: {str(e)}'}), 400
-        else:
-            try:
-                wb = xlrd.open_workbook(file_contents=file.read())
-                sheet = wb.sheet_by_index(0)
-                
-                # Validate header row
-                if sheet.ncols < 6:
-                    return jsonify({'error': 'Invalid file format. Missing required columns.'}), 400
-                
-                # Process data rows
-                for row_idx in range(1, sheet.nrows):
-                    try:
-                        row = sheet.row(row_idx)
-                        
-                        # Skip empty rows
-                        if not any(cell.value for cell in row):
-                            continue
-                            
-                        # Basic validation
-                        if not row[0].value or not row[1].value or not row[3].value:
-                            error_rows.append(f"Row {row_idx + 1}: Missing required fields (Item Code, Description, or UOM)")
-                            continue
-                        
-                        # Handle price and stock
-                        try:
-                            price = float(str(row[4].value).replace(',', ''))
-                            stock = int(float(str(row[5].value).replace(',', '')))
-                        except (ValueError, TypeError):
-                            error_rows.append(f"Row {row_idx + 1}: Invalid price or stock value")
-                            continue
-                        
-                        product = {
-                            'item_code': str(row[0].value).strip(),
-                            'description': str(row[1].value).strip(),
-                            'tamil_name': str(row[2].value).strip() if row[2].value else None,
-                            'uom': str(row[3].value).strip(),
-                            'price': price,
-                            'stock': stock,
-                            'restock_level': int(float(str(row[6].value or '0').replace(',', ''))),
-                            'stock_locations': str(row[7].value).strip() if len(row) > 7 and row[7].value else None,
-                            'tags': str(row[8].value).strip() if len(row) > 8 and row[8].value else None,
-                            'notes': str(row[9].value).strip() if len(row) > 9 and row[9].value else None
-                        }
-                        products.append(product)
-                    except Exception as e:
-                        error_rows.append(f"Row {row_idx + 1}: {str(e)}")
+                    # Basic validation
+                    if not row[0].value or not row[1].value or not row[3].value:
+                        error_details.append(f"Row {row_idx}: Missing required fields (Item Code, Description, or UOM)")
                         continue
-                        
-            except Exception as e:
-                return jsonify({'error': f'Error reading Excel file: {str(e)}'}), 400
-        
-        if not products:
-            return jsonify({'error': 'No valid products found in the file.'}), 400
-        
-        # Import products
-        db_errors = []
-        for product_data in products:
-            try:
-                # Validate item_code format
-                if not product_data['item_code'] or len(product_data['item_code']) > 20:
-                    db_errors.append(f"Invalid item code format: {product_data['item_code']}")
+                    
+                    # Handle price and stock
+                    try:
+                        price = float(str(row[4].value or '0').replace(',', ''))
+                        stock = int(float(str(row[5].value or '0').replace(',', '')))
+                    except (ValueError, TypeError) as e:
+                        error_details.append(f"Row {row_idx}: Invalid price or stock value")
+                        print(f"Error parsing price/stock in row {row_idx}: {str(e)}")  # Debug log
+                        continue
+                    
+                    product = {
+                        'item_code': str(row[0].value).strip(),
+                        'description': str(row[1].value).strip(),
+                        'tamil_name': str(row[2].value).strip() if row[2].value else None,
+                        'uom': str(row[3].value).strip(),
+                        'price': price,
+                        'stock': stock,
+                        'restock_level': int(float(str(row[6].value or '0').replace(',', ''))),
+                        'stock_locations': str(row[7].value).strip() if len(row) > 7 and row[7].value else None,
+                        'tags': str(row[8].value).strip() if len(row) > 8 and row[8].value else None,
+                        'notes': str(row[9].value).strip() if len(row) > 9 and row[9].value else None
+                    }
+                    products.append(product)
+                    print(f"Processed row {row_idx}: {product['item_code']}")  # Debug log
+                except Exception as e:
+                    error_details.append(f"Row {row_idx}: {str(e)}")
+                    print(f"Error processing row {row_idx}: {str(e)}")  # Debug log
                     continue
-                
-                product = Product.query.filter_by(item_code=product_data['item_code']).first()
-                if product:
-                    # Update existing product
-                    for key, value in product_data.items():
-                        setattr(product, key, value)
-                else:
-                    # Create new product
-                    product = Product(**product_data)
-                    db.session.add(product)
-                
-                db.session.commit()
-                imported_count += 1
-            except Exception as e:
-                db.session.rollback()
-                db_errors.append(f"Error with item code {product_data['item_code']}: {str(e)}")
-                continue
-        
-        # Prepare response message
-        message = f"Successfully imported {imported_count} products."
-        if error_rows or db_errors:
-            message += "\n\nErrors encountered:"
-            if error_rows:
-                message += "\nFile errors:\n" + "\n".join(error_rows)
-            if db_errors:
-                message += "\nDatabase errors:\n" + "\n".join(db_errors)
-        
-        return jsonify({
-            'success': imported_count > 0,
-            'message': message,
-            'imported_count': imported_count,
-            'error_count': len(error_rows) + len(db_errors)
-        }), 200 if imported_count > 0 else 400
-        
+            
+            # Import products
+            for product_data in products:
+                try:
+                    # Validate item_code format
+                    if not product_data['item_code'] or len(product_data['item_code']) > 20:
+                        error_details.append(f"Invalid item code format: {product_data['item_code']}")
+                        continue
+                    
+                    product = Product.query.filter_by(item_code=product_data['item_code']).first()
+                    if product:
+                        # Update existing product
+                        for key, value in product_data.items():
+                            setattr(product, key, value)
+                    else:
+                        # Create new product
+                        product = Product(**product_data)
+                        db.session.add(product)
+                    
+                    db.session.commit()
+                    imported_count += 1
+                    print(f"Imported product: {product_data['item_code']}")  # Debug log
+                except Exception as e:
+                    db.session.rollback()
+                    error_details.append(f"Error with item code {product_data['item_code']}: {str(e)}")
+                    print(f"Error importing product {product_data['item_code']}: {str(e)}")  # Debug log
+                    continue
+            
+            response_data = {
+                'success': imported_count > 0,
+                'message': f"Successfully imported {imported_count} products.",
+                'total_count': total_count,
+                'imported_count': imported_count,
+                'error_count': len(error_details),
+                'error_details': error_details
+            }
+            print(f"Import completed: {response_data}")  # Debug log
+            return jsonify(response_data), 200 if imported_count > 0 else 400
+            
+        except Exception as e:
+            print(f"Error reading Excel file: {str(e)}")  # Debug log
+            return jsonify({
+                'success': False,
+                'error': f"Error reading Excel file: {str(e)}",
+                'total_count': total_count,
+                'imported_count': imported_count,
+                'error_count': len(error_details),
+                'error_details': error_details
+            }), 400
+            
     except Exception as e:
+        print(f"Unexpected error: {str(e)}")  # Debug log
         return jsonify({
             'success': False,
             'error': f"Import failed: {str(e)}",
@@ -1748,10 +1781,7 @@ def login():
             
             session['user_id'] = user.id
             session['logged_in'] = True
-            
-            # Redirect to the originally requested URL if it exists
-            next_url = session.pop('next', None)
-            return redirect(next_url or url_for('index'))
+            return redirect(url_for('index'))
         else:
             flash('Invalid username or password')
             return redirect(url_for('login'))
@@ -1766,28 +1796,11 @@ def logout():
 @app.before_request
 def require_login():
     # List of routes that don't require login
-    public_routes = [
-        'login',
-        'static',
-        'manifest.json',
-        'sw.js',
-        'serve_icon',
-        None  # For the root route '/'
-    ]
+    public_routes = ['login', 'static']
     
-    # Check if the request is for static files
-    if request.path.startswith('/static/'):
-        return None
-        
-    # Allow OPTIONS requests (for CORS)
-    if request.method == 'OPTIONS':
-        return None
-        
     # Check if the requested endpoint is in public routes
-    if request.endpoint not in public_routes:
-        if not session.get('logged_in'):
-            # Store the requested URL for redirecting after login
-            session['next'] = request.url
+    if request.endpoint and request.endpoint not in public_routes:
+        if 'logged_in' not in session:
             return redirect(url_for('login'))
 
 @app.route('/users')
@@ -2912,9 +2925,12 @@ def save_invoice():
 
 # Add this function for database connection
 def get_db_connection():
-    conn = sqlite3.connect('instance/inventory.db')
-    conn.row_factory = sqlite3.Row
-    return conn
+    import psycopg2
+    from psycopg2.extras import DictCursor
+    return psycopg2.connect(
+        os.getenv('DATABASE_URL'),
+        cursor_factory=DictCursor
+    )
 
 if __name__ == '__main__':
     init_db()  # Initialize database with sample data

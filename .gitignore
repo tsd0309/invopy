@@ -16,7 +16,6 @@ lib64/
 parts/
 sdist/
 var/
-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
@@ -25,19 +24,28 @@ wheels/
 venv/
 ENV/
 
-# Flask
-instance/
-.webassets-cache
-
-# SQLite database
-*.db
-
-# VS Code
+# IDE
+.idea/
 .vscode/
+*.swp
+*.swo
 
 # Environment variables
 .env
 
-# Vercel
-.vercel 
-.vercel
+# Database
+*.db
+*.sqlite3
+
+# Logs
+*.log
+
+# Local development
+instance/
+.webassets-cache/
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*~ 
