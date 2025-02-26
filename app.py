@@ -489,10 +489,9 @@ def index():
     # Get recent invoices
     recent_invoices = Invoice.query.order_by(Invoice.date.desc()).limit(5).all()
     
-    response = render_template('index.html', 
-                             user=user,
-                             low_stock_products=low_stock_products,
-                             recent_invoices=recent_invoices)
+    # Get settings
+    settings = Settings.query.first()
+    wallpaper_url = url_for('static', filename=f'wallpapers/{settings.wallpaper_path}') if settings and settings.wallpaper_path else None
     
     # Calculate total inventory cost
     total_inventory_cost = sum(product.stock * product.price for product in Product.query.all())
@@ -517,7 +516,7 @@ def index():
         'total_products': Product.query.count(),
         'total_invoices': Invoice.query.count(),
         'total_sales': db.session.query(db.func.sum(Invoice.total_amount)).scalar() or 0,
-        'recent_invoices': Invoice.query.order_by(Invoice.date.desc()).limit(5).all(),
+        'recent_invoices': recent_invoices,
         'low_stock_products': low_stock_products,
         'total_inventory_cost': total_inventory_cost,
         'stockout_count': stockout_count,
@@ -525,7 +524,10 @@ def index():
         'slow_moving_count': 0,
         'stockout_frequency': []
     }
-    return render_template('index.html', stats=stats, wallpaper_url=wallpaper_url)
+    
+    response = render_template('index.html', stats=stats, wallpaper_url=wallpaper_url)
+    cache.set('dashboard_data', response, timeout=60)  # Cache for 1 minute
+    return response
 
 @app.route('/products/search')
 @login_required
@@ -2937,6 +2939,10 @@ def get_db_connection():
         os.getenv('DATABASE_URL'),
         cursor_factory=DictCursor
     )
+
+@app.route('/offline.html')
+def offline():
+    return render_template('offline.html')
 
 if __name__ == '__main__':
     init_db()  # Initialize database with sample data

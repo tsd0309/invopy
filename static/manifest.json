@@ -1,12 +1,19 @@
 {
-    "name": "Calculator",
-    "short_name": "Calculator",
-    "description": "A powerful calculator application",
-    "start_url": "/",
+    "name": "Inventory Management System",
+    "short_name": "Inventory",
+    "description": "Complete inventory management system with invoicing and customer management",
+    "start_url": "/?source=pwa",
+    "id": "/",
     "display": "standalone",
-    "background_color": "#ffffff",
+    "background_color": "#2c3e50",
     "theme_color": "#2c3e50",
-    "orientation": "portrait",
+    "orientation": "any",
+    "categories": ["business", "productivity"],
+    "launch_handler": {
+        "client_mode": ["navigate-existing", "auto"]
+    },
+    "display_override": ["standalone", "minimal-ui"],
+    "scope": "/",
     "icons": [
         {
             "src": "/static/icons/icon-72x72.png",
@@ -56,5 +63,15 @@
             "type": "image/png",
             "purpose": "any maskable"
         }
-    ]
+    ],
+    "screenshots": [
+        {
+            "src": "/static/screenshots/dashboard.png",
+            "sizes": "1280x720",
+            "type": "image/png",
+            "form_factor": "wide",
+            "label": "Dashboard View"
+        }
+    ],
+    "prefer_related_applications": false
 } 
