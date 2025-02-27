@@ -2954,6 +2954,15 @@ def get_db_connection():
 def offline():
     return render_template('offline.html')
 
+@app.route('/health')
+def health_check():
+    try:
+        # Test database connection
+        db.session.execute('SELECT 1')
+        return jsonify({"status": "healthy", "database": "connected"}), 200
+    except Exception as e:
+        return jsonify({"status": "unhealthy", "error": str(e)}), 500
+
 if __name__ == '__main__':
     init_db()  # Initialize database with sample data
     app.run(host='0.0.0.0', port=5000, debug=True)
