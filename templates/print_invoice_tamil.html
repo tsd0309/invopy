@@ -229,16 +229,16 @@
     <div class="page">
         {% if loop.first %}
         <div class="header">
-            <h2>விலைப்பட்டியல்</h2>
+            <h2>ESTIMATE</h2>
         </div>
         <div class="invoice-info">
             <table>
                 <tr>
                     <td style="text-align: left; width: 40%;">
-                        <strong>வாடிக்கையாளர்:</strong> 
+                        <strong>To:</strong> 
                         {{ invoice.customer.tamil_name or invoice.customer_name }}
                     </td>
-                    <td style="text-align: center; width: 30%;"><strong>பில் எண்:</strong> {{ invoice.order_number }}</td>
+                    <td style="text-align: center; width: 30%;"><strong>No:</strong> {{ invoice.order_number }}</td>
                     <td style="text-align: right; width: 30%;"><strong>தேதி:</strong> {{ invoice.date.strftime('%d-%m-%Y') }}</td>
                 </tr>
             </table>
@@ -305,7 +305,7 @@
             <div class="totals-wrapper">
                 <div class="total-row">
                     <span class="label">மொத்தம்:</span>
-                    <span class="amount">{{ "%.3f"|format(invoice.total_amount|round(3)|float) }}</span>
+                    <span class="amount">{{ "%.0f"|format(invoice.total_amount|round(0)|float) }}</span>
                 </div>
             </div>
             {% endif %}

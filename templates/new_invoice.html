@@ -176,16 +176,47 @@
         .item-row .product-info {
             display: flex;
             justify-content: space-between;
-            align-items: center;
+            align-items: flex-start;
             margin-bottom: 12px;
             padding-bottom: 8px;
             border-bottom: 1px solid #eee;
         }
         
-        .item-row .product-info .code-section {
+        .item-row .code-section {
             display: flex;
             align-items: center;
             gap: 8px;
+        }
+        
+        .item-row .product-details {
+            flex: 1;
+            margin-left: 12px;
+        }
+        
+        .item-row .product-name {
+            font-size: 14px;
+            color: #333;
+            margin-bottom: 4px;
+        }
+        
+        .item-row .product-meta {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 13px;
+            color: #666;
+        }
+        
+        .item-row .uom-label {
+            font-weight: 500;
+        }
+        
+        .item-row .uom-value {
+            text-transform: uppercase;
+            background: #f0f0f0;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 12px;
         }
         
         .item-row .serial-number {
@@ -383,15 +414,18 @@
             left: 0;
             right: 0;
             background: #ffffff;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-            z-index: 1050;
-            max-height: 300px;
-            overflow-y: auto;
-            display: none;
+            border: 1px solid rgba(0,0,0,0.1);
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
             margin-top: 4px;
-            width: 100% !important;
+            max-height: 60vh;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            z-index: 1050;
+            transform: translateZ(0);
+            -webkit-transform: translateZ(0);
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
         }
         
         .search-results.show {
@@ -399,9 +433,11 @@
         }
         
         .search-item {
-            padding: 8px 12px;
-            border-bottom: 1px solid #eee;
+            padding: 12px;
+            border-bottom: 1px solid rgba(0,0,0,0.05);
             background: #ffffff;
+            transform: translateZ(0);
+            -webkit-transform: translateZ(0);
             display: flex;
             align-items: center;
             gap: 12px;
@@ -458,7 +494,7 @@
         
         @media (max-width: 768px) {
             .search-item {
-                padding: 8px 10px;
+                padding: 8px 12px;
             }
             
             .search-item .select-btn {
@@ -571,7 +607,7 @@
         overflow-x: hidden;
         z-index: 1050;
         box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        width: 600px;
+        width: 100%;
         border-radius: 4px;
         margin-top: 4px;
         scrollbar-width: thin;
@@ -680,68 +716,88 @@
     }
     /* Mobile-specific bottom bar styles */
     @media (max-width: 768px) {
-        .content-wrapper {
-            padding-bottom: 80px;  /* Add padding to prevent content from being hidden */
+        /* Hide Save & Print and Tamil print buttons on mobile */
+        .bottom-bar #save-print-invoice,
+        .bottom-bar #save-print-tamil-invoice,
+        .bottom-bar #save-download-invoice {
+            display: none !important;
         }
         
+        /* Increase the bottom bar height to accommodate stacked elements */
         .bottom-bar {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            background: #ffffff;
-            box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
-            padding: 12px 16px;
-            min-height: 60px;
-            height: auto;
-            z-index: 1000;
+            height: 90px !important; /* Taller to fit both elements */
+            padding: 0 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            flex-direction: column !important; /* Stack elements vertically */
         }
         
+        /* Adjust the row layout for vertical stacking */
         .bottom-bar .row {
-            flex-direction: row;
-            justify-content: space-between;
-            align-items: center;
-            gap: 8px;
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            position: relative !important;
+            height: 100% !important;
+            display: flex !important;
+            flex-direction: column !important; /* Stack columns vertically */
+            justify-content: center !important;
         }
         
-        .bottom-bar .col-md-4 {
-            width: auto;
-            flex: none;
-        }
-        
-        .bottom-bar .col-md-4:first-child {
-            display: none;  /* Hide total items */
-        }
-        
+        /* Position the total amount at the top */
         .bottom-bar .col-md-4:nth-child(2) {
-            display: flex;
-            align-items: center;
-            white-space: nowrap;
+            text-align: center !important;
+            font-size: 16px !important;
+            width: 100% !important;
+            padding: 8px 0 4px 0 !important; /* Add padding top and bottom */
+            order: 1 !important; /* Display first */
+            margin-bottom: 4px !important;
         }
         
+        /* Position the save button below the total amount */
         .bottom-bar .col-md-4:last-child {
-            display: flex;
-            gap: 8px;
-            justify-content: flex-end;
-            flex: 1;
+            display: flex !important;
+            justify-content: center !important;
+            padding: 0 0 8px 0 !important; /* Add padding bottom */
+            width: 100% !important;
+            order: 2 !important; /* Display second */
         }
         
-        .bottom-bar .btn {
-            padding: 8px 16px;
-            height: 40px;
-            font-size: 14px;
-            margin: 0;
-            min-width: 100px;
+        /* Style the save button */
+        .bottom-bar #save-invoice {
+            display: block !important;
+            width: 140px !important;
+            height: 44px !important;
+            font-size: 16px !important;
+            font-weight: 500 !important;
+            margin: 0 !important;
         }
         
-        .bottom-bar #save-print-invoice {
-            display: none;  /* Hide save & print button on mobile */
+        /* Hide the total items on mobile to save space */
+        .bottom-bar .col-md-4:first-child {
+            display: none !important;
         }
         
+        /* Ensure the container is properly sized */
+        .bottom-bar .container-fluid {
+            padding: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: center !important;
+        }
+        
+        /* Add extra space at the bottom of the content to prevent the button from overlapping content */
+        .content-wrapper {
+            padding-bottom: 100px !important; /* Increased to account for taller bottom bar */
+        }
+        
+        /* Style the total amount for better visibility */
         #total-amount {
-            font-size: 1.2em;
-            font-weight: bold;
-            margin-left: 4px;
+            font-size: 1.3em !important;
+            font-weight: bold !important;
         }
     }
     /* Hide Save & Download button in both desktop and mobile views */
@@ -749,36 +805,36 @@
         display: none !important;
     }
     .modal-body .search-results {
-        position: absolute;
-        top: 100%;
-        left: 0;
-        right: 0;
+        position: fixed !important; /* Force fixed positioning */
+        top: auto !important; /* Let JS calculate this */
+        left: 0 !important;
+        right: 0 !important;
         background: #ffffff;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-        max-height: 50vh;
+        border: 1px solid rgba(0,0,0,0.15);
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        max-height: 60vh; /* Increased height for better scrolling */
         overflow-y: auto;
-        z-index: 2002;
-        display: none;
-        touch-action: pan-y;
+        z-index: 9999 !important; /* Extremely high z-index to be above everything */
         -webkit-overflow-scrolling: touch;
-        overscroll-behavior: contain;
-        pointer-events: auto;
+        margin-top: 4px;
+        transform: none !important;
+        -webkit-transform: none !important;
+        backface-visibility: visible !important;
+        -webkit-backface-visibility: visible !important;
+        will-change: transform;
+        -webkit-tap-highlight-color: transparent;
     }
     
     .search-item {
-        padding: 16px;
-        border-bottom: 1px solid #eee;
+        padding: 12px 16px;
+        border-bottom: 1px solid rgba(0,0,0,0.08);
         background: #ffffff;
         display: flex;
-        flex-direction: column;
-        width: 100%;
-        gap: 8px;
-        position: relative;
-        touch-action: pan-y;
-        user-select: none;
-        -webkit-tap-highlight-color: transparent;
+        align-items: center;
+        min-height: 56px;
+        position: relative; /* Ensure proper stacking context */
+        z-index: 10000; /* Higher than container */
     }
     
     .search-item.selected {
@@ -804,14 +860,10 @@
     @media (min-width: 769px) {
         .search-item {
             display: grid;
-            grid-template-columns: 100px 1fr 100px 100px;
+            grid-template-columns: 100px minmax(300px, 1fr) 80px 100px 100px;
             gap: 10px;
             padding: 8px 12px;
             cursor: pointer;
-        }
-
-        .search-item .code {
-            font-weight: bold;
         }
 
         .search-item .name {
@@ -820,17 +872,63 @@
             text-overflow: ellipsis;
         }
 
+        .search-item .uom {
+            text-align: center;
+            text-transform: uppercase;
+            font-size: 12px;
+            color: #666;
+        }
+    }
+
+    /* Mobile styles for search items */
+    @media (max-width: 768px) {
+        .modal-body .search-results {
+            width: 100% !important;
+            max-width: none;
+            left: 0;
+            right: 0;
+        }
+
+        .search-item {
+            padding: 12px;
+        }
+
+        .search-item .content {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+            width: 100%;
+        }
+
+        .search-item .item-details {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .search-item .item-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 4px;
+        }
+
         .search-item .price {
+            color: #007bff;
+            font-weight: 500;
+            min-width: 80px;
             text-align: right;
         }
 
-        .search-item .stock {
-            text-align: right;
-            color: #28a745;
-        }
-
-        .search-item.selected {
-            background-color: var(--dropdown-hover);
+        .search-item .uom {
+            color: #666;
+            text-transform: uppercase;
+            font-size: 12px;
+            padding: 2px 6px;
+            background: #f0f0f0;
+            border-radius: 3px;
+            white-space: nowrap;
         }
     }
 
@@ -960,6 +1058,483 @@
         width: auto;                      /* Restore width */
         padding: 2px 6px;                 /* Restore padding */
         margin: 0;                        /* Keep margin 0 */
+    }
+
+    /* Mobile styles for search items */
+    @media (max-width: 768px) {
+        .search-item {
+            padding: 8px 12px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .search-item .content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .search-item .item-details {
+            flex: 1;
+            min-width: 0;
+        }
+        
+        .search-item .item-main {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 4px;
+        }
+        
+        .search-item .code {
+            font-weight: bold;
+            color: #666;
+            font-size: 13px;
+            white-space: nowrap;
+        }
+        
+        .search-item .name {
+            font-size: 14px;
+            color: #333;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .search-item .item-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 13px;
+        }
+        
+        .search-item .price {
+            color: #007bff;
+            font-weight: 500;
+        }
+        
+        .search-item .uom {
+            color: #666;
+            text-transform: uppercase;
+            font-size: 12px;
+            padding: 2px 6px;
+            background: #f0f0f0;
+            border-radius: 3px;
+        }
+        
+        .search-item .stock {
+            color: #28a745;
+        }
+        
+        .search-item .select-btn {
+            padding: 4px 12px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 13px;
+            white-space: nowrap;
+        }
+        
+        .search-item .select-btn:active {
+            background: #0056b3;
+        }
+    }
+
+    .product-entry-modal .modal-body {
+        padding: 16px;
+        background: #ffffff;
+        border-radius: 4px;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        max-height: 50vh;
+        overflow-y: auto;
+        z-index: 2002;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+
+    .product-entry-modal .search-item {
+        padding: 16px;
+        border-bottom: 1px solid #eee;
+        background: #ffffff;
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        gap: 8px;
+    }
+
+    .product-entry-modal .search-item .item-info {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-top: 8px;
+    }
+
+    .product-entry-modal .search-item .uom {
+        color: #666;
+        text-transform: uppercase;
+        font-size: 13px;
+        padding: 4px 8px;
+        background: #f0f0f0;
+        border-radius: 4px;
+        font-weight: 500;
+        display: inline-flex;
+        align-items: center;
+    }
+
+    .product-entry-modal .search-item .uom:before {
+        content: 'UOM:';
+        margin-right: 4px;
+        font-weight: normal;
+        color: #888;
+    }
+
+    .product-entry-modal .selected-product-info {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: #f8f9fa;
+        padding: 12px;
+        border-radius: 4px;
+        margin-top: 8px;
+    }
+
+    .product-entry-modal .selected-product-info .uom {
+        color: #666;
+        text-transform: uppercase;
+        font-size: 13px;
+        padding: 4px 8px;
+        background: #fff;
+        border-radius: 4px;
+        font-weight: 500;
+    }
+
+    /* Improved mobile modal search dropdown styles */
+    @media (max-width: 768px) {
+        /* Enhanced search results container */
+        .product-entry-modal .search-results {
+            position: fixed !important; /* Force fixed positioning */
+            top: auto !important; /* Let JS calculate this */
+            left: 0 !important;
+            right: 0 !important;
+            background: #ffffff;
+            border: 1px solid rgba(0,0,0,0.15);
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            max-height: 60vh; /* Increased height for better scrolling */
+            overflow-y: auto;
+            z-index: 2100; /* Increased z-index to ensure it's above everything */
+            -webkit-overflow-scrolling: touch;
+            margin-top: 4px;
+            transform: none !important;
+            -webkit-transform: none !important;
+            backface-visibility: visible !important;
+            -webkit-backface-visibility: visible !important;
+            will-change: transform;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        /* Improved search item styling */
+        .product-entry-modal .search-results .search-item {
+            padding: 12px 16px;
+            border-bottom: 1px solid rgba(0,0,0,0.08);
+            background: #ffffff;
+            display: flex;
+            align-items: center;
+            min-height: 56px;
+            position: relative; /* Ensure proper stacking context */
+            z-index: 2101; /* Higher than container */
+        }
+        
+        .product-entry-modal .search-results .search-item .content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+            gap: 12px;
+        }
+        
+        .product-entry-modal .search-results .search-item .item-details {
+            flex: 1;
+            min-width: 0;
+        }
+        
+        .product-entry-modal .search-results .search-item .item-main {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 6px;
+        }
+        
+        .product-entry-modal .search-results .search-item .code {
+            font-weight: 600;
+            color: #444;
+            font-size: 14px;
+            white-space: nowrap;
+            letter-spacing: 0.01em;
+        }
+        
+        .product-entry-modal .search-results .search-item .name {
+            font-size: 15px;
+            color: #222;
+            font-weight: 500;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            letter-spacing: 0.01em;
+        }
+        
+        .product-entry-modal .search-results .search-item .item-info {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            font-size: 14px;
+        }
+        
+        .product-entry-modal .search-results .search-item .price {
+            color: #007bff;
+            font-weight: 600;
+            font-size: 15px;
+        }
+        
+        .product-entry-modal .search-results .search-item .uom {
+            color: #555;
+            text-transform: uppercase;
+            font-size: 13px;
+            padding: 3px 8px;
+            background: #f5f7fa;
+            border-radius: 4px;
+            font-weight: 500;
+            letter-spacing: 0.02em;
+        }
+        
+        .product-entry-modal .search-results .search-item .stock {
+            color: #28a745;
+            font-weight: 500;
+        }
+        
+        .product-entry-modal .search-results .search-item .select-btn {
+            padding: 6px 14px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            white-space: nowrap;
+            box-shadow: 0 2px 4px rgba(0,123,255,0.2);
+            min-width: 80px;
+            text-align: center;
+        }
+        
+        .product-entry-modal .search-results .search-item .select-btn:active {
+            background: #0062cc;
+            transform: translateY(1px);
+        }
+        
+        /* Improve modal layout for better scrolling */
+        .product-entry-modal .modal-content {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            overflow: hidden;
+            position: relative; /* Ensure proper stacking context */
+        }
+        
+        .product-entry-modal .modal-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+            -webkit-overflow-scrolling: touch;
+            padding-bottom: 84px; /* Increased padding to account for footer height */
+            position: relative; /* Ensure proper stacking context */
+        }
+        
+        /* Position the form group with search results properly */
+        .product-entry-modal .form-group {
+            margin-bottom: 20px;
+            position: relative;
+        }
+        
+        /* Special handling for the search form group */
+        .product-entry-modal .form-group:first-child {
+            z-index: 2099; /* High z-index but below dropdown */
+            position: relative;
+        }
+        
+        /* Ensure other form groups don't overlap with dropdown */
+        .product-entry-modal .form-group:not(:first-child) {
+            position: relative;
+            z-index: 1; /* Lower z-index than dropdown */
+        }
+        
+        .product-entry-modal .form-group:last-child {
+            margin-bottom: 80px; /* Extra space at the bottom to ensure scrollability */
+        }
+        
+        .product-entry-modal .modal-footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: #ffffff;
+            padding: 16px;
+            border-top: 1px solid #ddd;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+            z-index: 2050; /* High but below dropdown */
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .product-entry-modal .modal-footer .btn {
+            flex: 1;
+            margin: 0 6px;
+            height: 48px;
+            font-size: 16px;
+            font-weight: 500;
+        }
+        
+        .product-entry-modal .modal-footer .btn:first-child {
+            margin-left: 0;
+        }
+        
+        .product-entry-modal .modal-footer .btn:last-child {
+            margin-right: 0;
+        }
+        
+        /* Ensure the product search container has proper positioning */
+        .product-entry-modal .product-search {
+            position: relative;
+            z-index: 2099; /* High z-index */
+        }
+        
+        /* Improve modal search input */
+        .product-entry-modal #modal-product-search {
+            height: 44px;
+            font-size: 16px;
+            padding: 8px 12px;
+            border-radius: 8px;
+            border: 1px solid rgba(0,0,0,0.2);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        
+        .product-entry-modal #modal-product-search:focus {
+            border-color: #007bff;
+            box-shadow: 0 0 0 3px rgba(0,123,255,0.15);
+        }
+        
+        /* Improve modal form labels */
+        .product-entry-modal .form-group label {
+            font-size: 14px;
+            font-weight: 500;
+            color: #444;
+            margin-bottom: 6px;
+        }
+    }
+    
+    /* Improved input field heights for mobile modal */
+    @media (max-width: 768px) {
+        /* Make quantity input taller and more user-friendly */
+        .product-entry-modal #modal-quantity {
+            height: 56px !important; /* Significantly taller */
+            font-size: 18px !important; /* Larger font */
+            padding: 12px !important; /* More padding */
+            margin-bottom: 16px !important; /* Space below */
+            border-radius: 8px !important; /* Rounded corners */
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1) !important; /* Subtle shadow */
+            border: 1px solid rgba(0,0,0,0.2) !important; /* Visible border */
+            background-color: #ffffff !important; /* White background */
+            text-align: center !important; /* Center text */
+            font-weight: 500 !important; /* Slightly bolder */
+        }
+        
+        /* Style the quantity label to match */
+        .product-entry-modal .form-group label[for="modal-quantity"],
+        .product-entry-modal .form-group:nth-child(3) label {
+            font-size: 16px !important;
+            font-weight: 500 !important;
+            margin-bottom: 8px !important;
+            color: #333 !important;
+        }
+        
+        /* Add more space between quantity and price fields */
+        .product-entry-modal .form-group:nth-child(3) {
+            margin-bottom: 24px !important;
+        }
+        
+        /* Adjust the price input to match the style but keep it normal height */
+        .product-entry-modal #modal-price {
+            height: 44px !important;
+            font-size: 16px !important;
+            padding: 8px 12px !important;
+            border-radius: 8px !important;
+            background-color: #ffffff !important;
+            text-align: center !important;
+        }
+        
+        /* Ensure there's enough space at the bottom before buttons */
+        .product-entry-modal .form-group:last-child {
+            margin-bottom: 32px !important;
+        }
+    }
+
+    /* Improved modal body height and spacing */
+    @media (max-width: 768px) {
+        .product-entry-modal .modal-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+            -webkit-overflow-scrolling: touch;
+            padding-bottom: 120px !important; /* Significantly increased padding to push content up */
+            position: relative; /* Ensure proper stacking context */
+            z-index: 9991;
+            min-height: 75vh !important; /* Minimum height of 75% of viewport height */
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: flex-start !important;
+        }
+        
+        /* Adjust the form groups to fill the available space */
+        .product-entry-modal .form-group {
+            margin-bottom: 24px !important;
+        }
+        
+        /* Make the last form group push down toward the footer */
+        .product-entry-modal .form-group:last-child {
+            margin-bottom: 40px !important;
+            margin-top: auto !important; /* Push to the bottom of the flex container */
+        }
+        
+        /* Adjust the modal footer to be closer to the content */
+        .product-entry-modal .modal-footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: #ffffff;
+            padding: 16px;
+            border-top: 1px solid #ddd;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+            z-index: 9995; /* High but below dropdown */
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        /* Ensure the modal content fills the screen */
+        .product-entry-modal .modal-content {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            overflow: hidden;
+            position: fixed !important; /* Force fixed positioning */
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            z-index: 9990 !important; /* High but below dropdown */
+        }
     }
 </style>
 {% endblock %}
@@ -1103,21 +1678,6 @@
                 <div>
                     <span class="form-control-plaintext"></span>
                 </div>
-                <div>
-                    <span class="form-control-plaintext"></span>
-                </div>
-                <div>
-                    <span class="form-control-plaintext"></span>
-                </div>
-                <div>
-                    <span class="form-control-plaintext"></span>
-                </div>
-                <div>
-                    <span class="form-control-plaintext"></span>
-                </div>
-                <div>
-                    <span class="form-control-plaintext"></span>
-                </div>
                 <div></div>
             </div>
         </div>
@@ -1147,6 +1707,9 @@
             <div class="form-group">
                 <label>Selected Product</label>
                 <input type="text" class="form-control" id="modal-product-name" readonly>
+                <div class="selected-product-info" id="modal-product-info" style="display: none;">
+                    <span class="uom" id="modal-product-uom"></span>
+                </div>
             </div>
             <div class="form-group">
                 <label>Quantity</label>
@@ -1186,6 +1749,13 @@
 
 {% block extra_js %}
 <script>
+// Set user permissions globally
+{% if current_user.role == 'admin' or current_user.has_permission('view_invoice_stock') %}
+window.userHasStockPermission = true;
+{% else %}
+window.userHasStockPermission = false;
+{% endif %}
+
 document.addEventListener('DOMContentLoaded', function() {
     // Initialize date field with today's date
     document.getElementById('date').valueAsDate = new Date();
@@ -1242,7 +1812,13 @@ document.addEventListener('DOMContentLoaded', function() {
                         <span class="serial-number"></span>
                         <span class="product-code">${product.item_code}</span>
                     </div>
-                    <div class="product-name">${product.description}</div>
+                    <div class="product-details">
+                        <div class="product-name">${product.description}</div>
+                        <div class="product-meta">
+                            <span class="uom-label">UOM:</span>
+                            <span class="uom-value">${product.uom}</span>
+                        </div>
+                    </div>
                 </div>
                 <div class="values-row">
                     <div class="quantity-section">
@@ -1385,17 +1961,27 @@ document.addEventListener('DOMContentLoaded', function() {
         if (window.innerWidth <= 768) {
             div.innerHTML = `
                 <div class="content">
-                    <div class="name">${product.description}</div>
-                    <div class="price">₹${product.price.toFixed(2)}</div>
+                    <div class="item-details">
+                        <div class="item-main">
+                            <span class="code">${product.item_code}</span>
+                            <span class="name">${product.description}</span>
+                        </div>
+                        <div class="item-info">
+                            <span class="price">₹${product.price.toFixed(2)}</span>
+                            <span class="uom">${product.uom}</span>
+                            ${window.userHasStockPermission ? `<span class="stock">Stock: ${product.stock || 0}</span>` : ''}
+                        </div>
+                    </div>
+                    <button type="button" class="select-btn">Select</button>
                 </div>
-                <button type="button" class="select-btn">Select</button>
             `;
         } else {
             div.innerHTML = `
                 <div class="code">${product.item_code}</div>
                 <div class="name">${product.description}</div>
+                <div class="uom">${product.uom}</div>
                 <div class="price">₹${product.price.toFixed(2)}</div>
-                <div class="stock">${product.stock || 0}</div>
+                ${window.userHasStockPermission ? `<div class="stock">${product.stock || 0}</div>` : ''}
             `;
         }
 
@@ -1405,7 +1991,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (div.closest('.modal-body')) {
                     handleModalProductSelect(product);
                 } else {
-                    // Hide all search results before creating new row
                     document.querySelectorAll('.search-results').forEach(results => {
                         results.style.display = 'none';
                     });
@@ -1420,7 +2005,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (div.closest('.modal-body')) {
                     handleModalProductSelect(product);
                 } else {
-                    // Hide all search results before creating new row
                     document.querySelectorAll('.search-results').forEach(results => {
                         results.style.display = 'none';
                     });
@@ -1448,7 +2032,7 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Position the dropdown
         searchResults.style.position = 'fixed';
-        searchResults.style.width = '600px';
+        searchResults.style.width = '900px';
         searchResults.style.left = `${inputRect.left}px`;
         
         // Calculate available space
@@ -1480,6 +2064,17 @@ document.addEventListener('DOMContentLoaded', function() {
                     return;
                 }
                 
+                // Show loading state immediately
+                results.innerHTML = '<div class="search-item">Loading...</div>';
+                results.classList.add('show');
+                
+                // Ensure dropdown is visible and not blocked
+                results.style.zIndex = '2100';
+                results.style.position = 'absolute';
+                
+                // Clear any existing inline height
+                results.style.maxHeight = '';
+                
                 fetch(`/products/search?q=${encodeURIComponent(query)}`)
                     .then(response => response.json())
                     .then(products => {
@@ -1487,7 +2082,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         results.innerHTML = '';
                         
                         if (products.length === 0) {
-                            results.classList.remove('show');
+                            results.innerHTML = '<div class="search-item">No products found</div>';
                             return;
                         }
                         
@@ -1496,12 +2091,29 @@ document.addEventListener('DOMContentLoaded', function() {
                             results.appendChild(div);
                         });
                         
-                        results.classList.add('show');
-                        updateDropdownPosition(results);
+                        // Ensure dropdown is fully visible and scrollable
+                        setTimeout(() => {
+                            // Calculate available space
+                            const modalBody = document.querySelector('.product-entry-modal .modal-body');
+                            const modalFooter = document.querySelector('.product-entry-modal .modal-footer');
+                            const inputRect = input.getBoundingClientRect();
+                            const windowHeight = window.innerHeight;
+                            const footerHeight = modalFooter ? modalFooter.offsetHeight : 0;
+                            const availableHeight = windowHeight - inputRect.bottom - footerHeight - 20;
+                            
+                            // Set max height based on available space
+                            results.style.maxHeight = Math.min(availableHeight, windowHeight * 0.6) + 'px';
+                            
+                            // Ensure the dropdown is above other elements
+                            results.style.zIndex = '2100';
+                            
+                            // Make sure the dropdown is visible
+                            results.classList.add('show');
+                        }, 50);
                     })
                     .catch(error => {
                         console.error('Error fetching products:', error);
-                        results.classList.remove('show');
+                        results.innerHTML = '<div class="search-item">Error loading products</div>';
                     });
             });
             
@@ -1509,6 +2121,22 @@ document.addEventListener('DOMContentLoaded', function() {
             input.addEventListener('focus', function() {
                 if (this.value.trim().length > 0) {
                     results.classList.add('show');
+                    
+                    // Ensure dropdown is visible and not blocked
+                    setTimeout(() => {
+                        results.style.zIndex = '2100';
+                        
+                        // Calculate available space
+                        const modalBody = document.querySelector('.product-entry-modal .modal-body');
+                        const modalFooter = document.querySelector('.product-entry-modal .modal-footer');
+                        const inputRect = input.getBoundingClientRect();
+                        const windowHeight = window.innerHeight;
+                        const footerHeight = modalFooter ? modalFooter.offsetHeight : 0;
+                        const availableHeight = windowHeight - inputRect.bottom - footerHeight - 20;
+                        
+                        // Set max height based on available space
+                        results.style.maxHeight = Math.min(availableHeight, windowHeight * 0.6) + 'px';
+                    }, 50);
                 }
             });
             
@@ -1531,6 +2159,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     return;
                 }
                 
+                // Show loading state immediately
+                results.innerHTML = '<div class="search-item">Loading...</div>';
+                results.style.display = 'block';
+                updateDropdownPosition(results);
+                
                 fetch(`/products/search?q=${encodeURIComponent(query)}`)
                     .then(response => response.json())
                     .then(products => {
@@ -1544,8 +2177,12 @@ document.addEventListener('DOMContentLoaded', function() {
                             results.style.display = 'block';
                             updateDropdownPosition(results);
                         } else {
-                            results.style.display = 'none';
+                            results.innerHTML = '<div class="search-item">No products found</div>';
                         }
+                    })
+                    .catch(error => {
+                        console.error('Error fetching products:', error);
+                        results.innerHTML = '<div class="search-item">Error loading products</div>';
                     });
             });
         }
@@ -1792,7 +2429,13 @@ document.addEventListener('DOMContentLoaded', function() {
                                     <span class="serial-number"></span>
                                     <span class="product-code">${product.item_code}</span>
                                 </div>
-                                <div class="product-name">${product.description}</div>
+                                <div class="product-details">
+                                    <div class="product-name">${product.description}</div>
+                                    <div class="product-meta">
+                                        <span class="uom-label">UOM:</span>
+                                        <span class="uom-value">${product.uom}</span>
+                                    </div>
+                                </div>
                             </div>
                             <div class="values-row">
                                 <div class="quantity-section">
@@ -2149,8 +2792,44 @@ document.addEventListener('DOMContentLoaded', function() {
         modalProductName.value = '';
         modalQuantity.value = '';
         modalPrice.value = '';
+        
+        // Reset product info
+        const productInfo = document.getElementById('modal-product-info');
+        productInfo.style.display = 'none';
+        
         selectedProduct = null;
-        modalProductSearch.focus();
+        
+        // Ensure the modal body has enough space for scrolling
+        const modalBody = document.querySelector('.product-entry-modal .modal-body');
+        const modalFooter = document.querySelector('.product-entry-modal .modal-footer');
+        if (modalBody && modalFooter) {
+            const footerHeight = modalFooter.offsetHeight;
+            modalBody.style.paddingBottom = (footerHeight + 20) + 'px';
+        }
+        
+        // Reset any search results container styles
+        const searchResults = modalProductSearch.parentElement.querySelector('.search-results');
+        if (searchResults) {
+            searchResults.style.maxHeight = '';
+            searchResults.style.zIndex = '2100';
+            searchResults.classList.remove('show');
+        }
+        
+        // Ensure the modal content is properly positioned
+        const modalContent = document.querySelector('.product-entry-modal .modal-content');
+        if (modalContent) {
+            modalContent.style.position = 'fixed';
+            modalContent.style.top = '0';
+            modalContent.style.left = '0';
+            modalContent.style.right = '0';
+            modalContent.style.bottom = '0';
+            modalContent.style.zIndex = '2000';
+        }
+        
+        // Focus the search input after a short delay to ensure the modal is fully rendered
+        setTimeout(() => {
+            modalProductSearch.focus();
+        }, 100);
     }
     
     function hideModal() {
@@ -2165,6 +2844,13 @@ document.addEventListener('DOMContentLoaded', function() {
         modalProductName.value = product.description;
         modalPrice.value = product.price;
         modalQuantity.value = '';
+        
+        // Update UOM display
+        const productInfo = document.getElementById('modal-product-info');
+        const productUom = document.getElementById('modal-product-uom');
+        productUom.textContent = product.uom;
+        productInfo.style.display = 'flex';
+        
         modalQuantity.focus();
         
         const searchResults = modalProductSearch.parentElement.querySelector('.search-results');
@@ -2231,6 +2917,17 @@ document.addEventListener('DOMContentLoaded', function() {
                     return;
                 }
                 
+                // Show loading state immediately
+                results.innerHTML = '<div class="search-item">Loading...</div>';
+                results.classList.add('show');
+                
+                // Ensure dropdown is visible and not blocked
+                results.style.zIndex = '2100';
+                results.style.position = 'absolute';
+                
+                // Clear any existing inline height
+                results.style.maxHeight = '';
+                
                 fetch(`/products/search?q=${encodeURIComponent(query)}`)
                     .then(response => response.json())
                     .then(products => {
@@ -2238,7 +2935,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         results.innerHTML = '';
                         
                         if (products.length === 0) {
-                            results.classList.remove('show');
+                            results.innerHTML = '<div class="search-item">No products found</div>';
                             return;
                         }
                         
@@ -2247,12 +2944,29 @@ document.addEventListener('DOMContentLoaded', function() {
                             results.appendChild(div);
                         });
                         
-                        results.classList.add('show');
-                        updateDropdownPosition(results);
+                        // Ensure dropdown is fully visible and scrollable
+                        setTimeout(() => {
+                            // Calculate available space
+                            const modalBody = document.querySelector('.product-entry-modal .modal-body');
+                            const modalFooter = document.querySelector('.product-entry-modal .modal-footer');
+                            const inputRect = input.getBoundingClientRect();
+                            const windowHeight = window.innerHeight;
+                            const footerHeight = modalFooter ? modalFooter.offsetHeight : 0;
+                            const availableHeight = windowHeight - inputRect.bottom - footerHeight - 20;
+                            
+                            // Set max height based on available space
+                            results.style.maxHeight = Math.min(availableHeight, windowHeight * 0.6) + 'px';
+                            
+                            // Ensure the dropdown is above other elements
+                            results.style.zIndex = '2100';
+                            
+                            // Make sure the dropdown is visible
+                            results.classList.add('show');
+                        }, 50);
                     })
                     .catch(error => {
                         console.error('Error fetching products:', error);
-                        results.classList.remove('show');
+                        results.innerHTML = '<div class="search-item">Error loading products</div>';
                     });
             });
             
@@ -2260,6 +2974,22 @@ document.addEventListener('DOMContentLoaded', function() {
             input.addEventListener('focus', function() {
                 if (this.value.trim().length > 0) {
                     results.classList.add('show');
+                    
+                    // Ensure dropdown is visible and not blocked
+                    setTimeout(() => {
+                        results.style.zIndex = '2100';
+                        
+                        // Calculate available space
+                        const modalBody = document.querySelector('.product-entry-modal .modal-body');
+                        const modalFooter = document.querySelector('.product-entry-modal .modal-footer');
+                        const inputRect = input.getBoundingClientRect();
+                        const windowHeight = window.innerHeight;
+                        const footerHeight = modalFooter ? modalFooter.offsetHeight : 0;
+                        const availableHeight = windowHeight - inputRect.bottom - footerHeight - 20;
+                        
+                        // Set max height based on available space
+                        results.style.maxHeight = Math.min(availableHeight, windowHeight * 0.6) + 'px';
+                    }, 50);
                 }
             });
             
@@ -2282,6 +3012,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     return;
                 }
                 
+                // Show loading state immediately
+                results.innerHTML = '<div class="search-item">Loading...</div>';
+                results.style.display = 'block';
+                updateDropdownPosition(results);
+                
                 fetch(`/products/search?q=${encodeURIComponent(query)}`)
                     .then(response => response.json())
                     .then(products => {
@@ -2295,8 +3030,12 @@ document.addEventListener('DOMContentLoaded', function() {
                             results.style.display = 'block';
                             updateDropdownPosition(results);
                         } else {
-                            results.style.display = 'none';
+                            results.innerHTML = '<div class="search-item">No products found</div>';
                         }
+                    })
+                    .catch(error => {
+                        console.error('Error fetching products:', error);
+                        results.innerHTML = '<div class="search-item">Error loading products</div>';
                     });
             });
         }
@@ -2308,6 +3047,13 @@ document.addEventListener('DOMContentLoaded', function() {
         modalProductName.value = product.description;
         modalPrice.value = product.price;
         modalQuantity.value = '';
+        
+        // Update UOM display
+        const productInfo = document.getElementById('modal-product-info');
+        const productUom = document.getElementById('modal-product-uom');
+        productUom.textContent = product.uom;
+        productInfo.style.display = 'flex';
+        
         modalQuantity.focus();
         
         const searchResults = modalProductSearch.parentElement.querySelector('.search-results');

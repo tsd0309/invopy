@@ -28,12 +28,18 @@ load_dotenv()
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', os.urandom(24))
 
-# Database configuration - check both environment variables
-database_url = os.getenv('SQLALCHEMY_DATABASE_URI') or os.getenv('DATABASE_URL')
-if database_url and database_url.startswith('postgres://'):
-    database_url = database_url.replace('postgres://', 'postgresql://', 1)
+# Database configuration - check environment
+if os.getenv('FLASK_ENV') == 'production':
+    # Use Neon PostgreSQL in production
+    database_url = os.getenv('SQLALCHEMY_DATABASE_URI') or os.getenv('DATABASE_URL')
+    if database_url and database_url.startswith('postgres://'):
+        database_url = database_url.replace('postgres://', 'postgresql://', 1)
+    app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+else:
+    # Use SQLite in development
+    basedir = os.path.abspath(os.path.dirname(__file__))
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(basedir, 'app.db')
 
-app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Cache configuration
@@ -278,6 +284,7 @@ def init_permissions():
         ('view_product_price', 'Can view product prices'),
         ('edit_product_price', 'Can edit product prices'),
         ('view_product_stock', 'Can view product stock levels'),
+        ('view_invoice_stock', 'Can view stock in invoice search dropdown'),  # New permission
         ('edit_product_stock', 'Can edit product stock levels'),
         ('view_product_restock', 'Can view product restock levels'),
         ('edit_product_restock', 'Can edit product restock levels'),
@@ -726,21 +733,24 @@ def update_product(id):
 
 @app.route('/products/<int:id>', methods=['DELETE'])
 @login_required
-def product(id):
+@permission_required('delete_products')
+def delete_product(id):
     product = Product.query.get_or_404(id)
-    user = User.query.get(session['user_id'])  # Get current user
     
-    if request.method == 'DELETE':
-        if not user.has_permission('delete_products'):
-            return jsonify({'success': False, 'error': 'Permission denied'})
+    try:
+        # Check if product has any invoice items
+        if product.invoice_items:
+            return jsonify({
+                'success': False, 
+                'error': 'Cannot delete product with existing invoices. Please delete related invoices first.'
+            }), 400
             
-        try:
-            db.session.delete(product)
-            db.session.commit()
-            return jsonify({'success': True})
-        except Exception as e:
-            db.session.rollback()
-            return jsonify({'success': False, 'error': str(e)})
+        db.session.delete(product)
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/invoices')
 @login_required

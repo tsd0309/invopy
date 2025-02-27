@@ -66,3 +66,4 @@ uploads/
 
 # Node modules if you add any JS packages later
 node_modules/ 
+.vercel

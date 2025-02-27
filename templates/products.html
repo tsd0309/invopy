@@ -290,7 +290,7 @@
                                 data-uom="{{ product.uom }}"
                                 data-price="{{ product.price }}"
                                 data-stock="{{ product.stock }}"
-                                data-restock-level="{{ product.restock_level }}"
+                                data-restock-level="{{ product.restock_level or 0 }}"
                                 data-stock-locations="{{ product.stock_locations or '' }}"
                                 data-tags="{{ product.tags or '' }}"
                                 data-notes="{{ product.notes or '' }}">
@@ -733,12 +733,129 @@
     </div>
 </div>
 
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteConfirmModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirm Delete</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                Are you sure you want to delete this product?
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" id="confirmDelete">Delete</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block extra_js %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // Initialize Bootstrap components
+    const editModal = new bootstrap.Modal(document.getElementById('editProductModal'));
+    const deleteModal = new bootstrap.Modal(document.getElementById('deleteConfirmModal'));
+
+    // Edit Product Functionality
+    document.body.addEventListener('click', function(e) {
+        // Handle edit button clicks using event delegation
+        if (e.target.closest('.edit-product')) {
+            e.preventDefault();
+            const button = e.target.closest('.edit-product');
+            const form = document.getElementById('editProductForm');
+            
+            // Get data from button attributes
+            form.querySelector('[name="id"]').value = button.dataset.id;
+            form.querySelector('[name="item_code"]').value = button.dataset.code;
+            form.querySelector('[name="description"]').value = button.dataset.description;
+            form.querySelector('[name="tamil_name"]').value = button.dataset.tamilName || '';
+            form.querySelector('[name="uom"]').value = button.dataset.uom;
+            form.querySelector('[name="price"]').value = button.dataset.price;
+            form.querySelector('[name="stock"]').value = button.dataset.stock;
+            form.querySelector('[name="restock_level"]').value = button.dataset.restockLevel;
+            form.querySelector('[name="stock_locations"]').value = button.dataset.stockLocations || '';
+            form.querySelector('[name="tags"]').value = button.dataset.tags || '';
+            form.querySelector('[name="notes"]').value = button.dataset.notes || '';
+            
+            editModal.show();
+        }
+    });
+
+    // Handle form submission
+    document.getElementById('updateProduct').addEventListener('click', function() {
+        const form = document.getElementById('editProductForm');
+        const id = form.querySelector('[name="id"]').value;
+        
+        // Create data object
+        const data = {
+            item_code: form.querySelector('[name="item_code"]').value,
+            description: form.querySelector('[name="description"]').value,
+            tamil_name: form.querySelector('[name="tamil_name"]').value,
+            uom: form.querySelector('[name="uom"]').value,
+            price: parseFloat(form.querySelector('[name="price"]').value),
+            stock: parseInt(form.querySelector('[name="stock"]').value),
+            restock_level: parseInt(form.querySelector('[name="restock_level"]').value),
+            stock_locations: form.querySelector('[name="stock_locations"]').value,
+            tags: form.querySelector('[name="tags"]').value,
+            notes: form.querySelector('[name="notes"]').value
+        };
+
+        // Remove empty values
+        Object.keys(data).forEach(key => {
+            if (data[key] === '' || data[key] === null || data[key] === undefined || 
+                (typeof data[key] === 'number' && isNaN(data[key]))) {
+                delete data[key];
+            }
+        });
+
+        // Send update request
+        fetch(`/products/${id}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(result => {
+            if (result.success) {
+                editModal.hide();
+                showAlert('Product updated successfully', 'success');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showAlert(result.error || 'Failed to update product', 'danger');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showAlert('An error occurred while updating the product', 'danger');
+        });
+    });
+
+    // Helper function to show alerts
+    function showAlert(message, type) {
+        const alertDiv = document.createElement('div');
+        alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-3`;
+        alertDiv.style.zIndex = '9999';
+        alertDiv.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        document.body.appendChild(alertDiv);
+        
+        if (type === 'success') {
+            setTimeout(() => {
+                alertDiv.remove();
+            }, 2000);
+        }
+    }
+
     // Initialize popover
     const searchHelp = document.getElementById('searchHelp');
     new bootstrap.Popover(searchHelp, {
@@ -776,16 +893,21 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         // For other keys, wait for user to stop typing
-        searchTimeout = setTimeout(() => {
-            if (query) {
+        if (query.length > 0) {
+            searchTimeout = setTimeout(() => {
                 performSearch(query);
-            } else {
-                clearSearch();
-            }
-        }, 300);
+            }, 300);
+        } else {
+            clearSearch();
+        }
     });
 
     function performSearch(query) {
+        // Show loading state
+        searchResultsGrid.innerHTML = '<div class="text-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+        searchResults.style.display = 'block';
+        regularContent.style.display = 'none';
+
         fetch(`/products/search?q=${encodeURIComponent(query)}`)
             .then(response => response.json())
             .then(products => {
@@ -793,9 +915,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     displaySearchResults(products);
                 } else {
                     searchResultsGrid.innerHTML = '<div class="text-center text-muted">No products found</div>';
-                    searchResults.style.display = 'block';
-                    regularContent.style.display = 'none';
                 }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                searchResultsGrid.innerHTML = '<div class="text-center text-danger">Error searching products</div>';
             });
     }
 
@@ -828,27 +952,28 @@ document.addEventListener('DOMContentLoaded', function() {
                     <span class="label">Stock</span>
                     <span class="value">${product.stock}</span>
                 </div>
-                ${product.stock_locations_display ? `
+                ${product.stock_locations ? `
                 <div class="card-row">
                     <span class="label">Locations</span>
                     <span class="value">
-                        ${product.stock_locations_display.split(',').map(loc => 
+                        ${product.stock_locations.split(',').map(loc => 
                             `<span class="badge bg-info me-1">${loc.trim()}</span>`
                         ).join('')}
                     </span>
                 </div>
                 ` : ''}
-                ${product.tags_display ? `
+                ${product.tags ? `
                 <div class="card-row">
                     <span class="label">Tags</span>
                     <span class="value">
-                        ${product.tags_display.split(',').map(tag => 
+                        ${product.tags.split(',').map(tag => 
                             `<span class="badge bg-secondary me-1">${tag.trim()}</span>`
                         ).join('')}
                     </span>
                 </div>
                 ` : ''}
                 <div class="actions">
+                    {% if current_user.role == 'admin' or current_user.has_permission('edit_products') %}
                     <button class="btn btn-primary edit-product" 
                             data-id="${product.id}"
                             data-code="${product.item_code}"
@@ -857,22 +982,23 @@ document.addEventListener('DOMContentLoaded', function() {
                             data-uom="${product.uom}"
                             data-price="${product.price}"
                             data-stock="${product.stock}"
-                            data-restock-level="${product.restock_level}"
-                            data-stock-locations="${product.stock_locations_display}"
-                            data-tags="${product.tags_display}"
-                            data-notes="${product.notes_display}">
+                            data-restock-level="${product.restock_level || 0}"
+                            data-stock-locations="${product.stock_locations || ''}"
+                            data-tags="${product.tags || ''}"
+                            data-notes="${product.notes || ''}">
                         <i class="fas fa-edit"></i> Edit
                     </button>
+                    {% endif %}
+                    
+                    {% if current_user.role == 'admin' or current_user.has_permission('delete_products') %}
                     <button class="btn btn-danger delete-product" data-id="${product.id}">
                         <i class="fas fa-trash"></i> Delete
                     </button>
+                    {% endif %}
                 </div>
             </div>
         `).join('');
 
-        // Re-attach event listeners to the new elements
-        attachEventListeners();
-        
         searchResults.style.display = 'block';
         regularContent.style.display = 'none';
     }
@@ -881,20 +1007,6 @@ document.addEventListener('DOMContentLoaded', function() {
         searchInput.value = '';
         searchResults.style.display = 'none';
         regularContent.style.display = 'block';
-    }
-
-    function attachEventListeners() {
-        // Re-attach edit button listeners
-        document.querySelectorAll('.edit-product').forEach(button => {
-            button.removeEventListener('click', handleEditClick);
-            button.addEventListener('click', handleEditClick);
-        });
-
-        // Re-attach delete button listeners
-        document.querySelectorAll('.delete-product').forEach(button => {
-            button.removeEventListener('click', handleDeleteClick);
-            button.addEventListener('click', handleDeleteClick);
-        });
     }
 
     // Import button click handler
@@ -1012,42 +1124,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     };
 
-    // Update Product
-    document.getElementById('updateProduct').addEventListener('click', function() {
-        const form = document.getElementById('editProductForm');
-        const formData = new FormData(form);
-        const id = formData.get('id');
-        
-        const data = {};
-        formData.forEach((value, key) => {
-            if (value.trim() !== '') {  // Only include non-empty values
-                data[key] = value;
-            }
-        });
-
-        fetch(`/products/${id}`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(data)
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                bootstrap.Modal.getInstance(document.getElementById('editProductModal')).hide();
-                showAlert('Product updated successfully', 'success');
-                setTimeout(() => location.reload(), 1000);
-            } else {
-                showAlert(data.error || 'Failed to update product', 'danger');
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            showAlert('An error occurred while updating the product', 'danger');
-        });
-    });
-
     // Add Product
     document.getElementById('saveProduct').addEventListener('click', function() {
         const form = document.getElementById('addProductForm');
@@ -1095,126 +1171,66 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // Edit product handler
-    function handleEditClick() {
-        const form = document.getElementById('editProductForm');
-        const modal = new bootstrap.Modal(document.getElementById('editProductModal'));
+    // Delete product functionality
+    let productToDelete = null;
+    
+    // Handle delete button clicks
+    document.querySelectorAll('.delete-product').forEach(button => {
+        button.addEventListener('click', function(e) {
+            e.preventDefault();
+            productToDelete = this.dataset.id;
+            deleteModal.show();
+        });
+    });
+    
+    // Handle delete confirmation
+    document.getElementById('confirmDelete').addEventListener('click', async function() {
+        if (!productToDelete) return;
         
-        // Get all data attributes
-        const dataset = this.dataset;
-        
-        // Set form values
-        if (form.querySelector('[name="id"]')) form.querySelector('[name="id"]').value = dataset.id;
-        if (form.querySelector('[name="item_code"]')) form.querySelector('[name="item_code"]').value = dataset.code;
-        if (form.querySelector('[name="description"]')) form.querySelector('[name="description"]').value = dataset.description;
-        if (form.querySelector('[name="tamil_name"]')) form.querySelector('[name="tamil_name"]').value = dataset.tamilName || '';
-        if (form.querySelector('[name="uom"]')) form.querySelector('[name="uom"]').value = dataset.uom;
-        if (form.querySelector('[name="price"]')) form.querySelector('[name="price"]').value = dataset.price;
-        if (form.querySelector('[name="stock"]')) form.querySelector('[name="stock"]').value = dataset.stock;
-        if (form.querySelector('[name="restock_level"]')) form.querySelector('[name="restock_level"]').value = dataset.restockLevel;
-        if (form.querySelector('[name="stock_locations"]')) form.querySelector('[name="stock_locations"]').value = dataset.stockLocations || '';
-        if (form.querySelector('[name="tags"]')) form.querySelector('[name="tags"]').value = dataset.tags || '';
-        if (form.querySelector('[name="notes"]')) form.querySelector('[name="notes"]').value = dataset.notes || '';
-        
-        modal.show();
-    }
-
-    // Delete product (for both desktop and mobile)
-    function handleDeleteClick() {
-        if (confirm('Are you sure you want to delete this product?')) {
-            const id = this.dataset.id;
+        try {
+            // Disable the delete button
+            const deleteBtn = document.getElementById('confirmDelete');
+            deleteBtn.disabled = true;
             
-            fetch(`/products/${id}`, {
-                method: 'DELETE'
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    location.reload();
-                } else {
-                    alert('Error deleting product: ' + data.error);
+            const response = await fetch(`/products/${productToDelete}`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json'
                 }
             });
-        }
-    }
-
-    // Add the paste import handler
-    document.getElementById('processPastedData').addEventListener('click', function() {
-        const textarea = document.getElementById('pasteInput');
-        const data = textarea.value.trim();
-        
-        if (!data) {
-            alert('Please paste some data first');
-            return;
-        }
-
-        // Parse the pasted data
-        const rows = data.split('\n').map(row => row.split('\t'));
-        
-        // Skip header row and process data
-        const products = [];
-        for (let i = 1; i < rows.length; i++) {
-            const row = rows[i];
-            if (row.length < 7) continue; // Skip invalid rows
             
-            try {
-                const product = {
-                    item_code: row[0].trim(),
-                    description: row[1].trim(),
-                    tamil_name: row[2].trim(),
-                    uom: row[3].trim(),
-                    price: parseFloat(row[4].replace(/[^0-9.-]+/g, '')),
-                    stock: parseInt(row[5].replace(/[^0-9-]+/g, '')),
-                    restock_level: parseInt(row[6].replace(/[^0-9-]+/g, '')) || 0
-                };
-                
-                if (product.item_code && product.description && product.uom && 
-                    !isNaN(product.price) && !isNaN(product.stock)) {
-                    products.push(product);
-                }
-            } catch (e) {
-                console.error('Error processing row:', e);
-            }
-        }
-
-        if (products.length === 0) {
-            alert('No valid data found. Please check the format and try again.');
-            return;
-        }
-
-        // Show loading state
-        const importBtn = document.getElementById('processPastedData');
-        const originalText = importBtn.textContent;
-        importBtn.textContent = 'Importing...';
-        importBtn.disabled = true;
-
-        // Send the processed data to the server
-        fetch('/products/import-json', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ products: products })
-        })
-        .then(response => response.json())
-        .then(data => {
+            const data = await response.json();
+            
             if (data.success) {
-                alert(data.message || 'Products imported successfully');
-                location.reload();
-            } else {
-                alert('Error importing products: ' + data.error);
+                // Close all modals
+                const modals = document.querySelectorAll('.modal');
+                modals.forEach(modal => {
+                    const bsModal = bootstrap.Modal.getInstance(modal);
+                    if (bsModal) {
+                        bsModal.hide();
+                    }
+                });
+                
+                // Remove any existing alerts
+                const alerts = document.querySelectorAll('.alert');
+                alerts.forEach(alert => alert.remove());
+                
+                // Redirect without showing any messages
+                window.location.href = '/products';
             }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('Error importing products. Please try again.');
-        })
-        .finally(() => {
-            // Reset
-            textarea.value = '';
-            importBtn.textContent = originalText;
-            importBtn.disabled = false;
-        });
+        } catch (error) {
+            // Just close the modal and reset state without showing errors
+            const modals = document.querySelectorAll('.modal');
+            modals.forEach(modal => {
+                const bsModal = bootstrap.Modal.getInstance(modal);
+                if (bsModal) {
+                    bsModal.hide();
+                }
+            });
+        } finally {
+            productToDelete = null;
+            document.getElementById('confirmDelete').disabled = false;
+        }
     });
 
     // Quick Stock Adjustment
@@ -1318,19 +1334,6 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     });
-
-    // Helper function to show alerts
-    function showAlert(message, type) {
-        const alertDiv = document.createElement('div');
-        alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-3`;
-        alertDiv.style.zIndex = '9999';
-        alertDiv.innerHTML = `
-            ${message}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        `;
-        document.body.appendChild(alertDiv);
-        setTimeout(() => alertDiv.remove(), 3000);
-    }
 });
 </script>
 {% endblock %} 
