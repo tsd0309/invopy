@@ -284,7 +284,7 @@
                         {% if current_user.role == 'admin' or current_user.has_permission('edit_products') %}
                         <button class="btn btn-primary edit-product" 
                                 data-id="{{ product.id }}"
-                                data-code="{{ product.item_code }}"
+                                data-item-code="{{ product.item_code }}"
                                 data-description="{{ product.description }}"
                                 data-tamil-name="{{ product.tamil_name or '' }}"
                                 data-uom="{{ product.uom }}"
@@ -293,7 +293,8 @@
                                 data-restock-level="{{ product.restock_level or 0 }}"
                                 data-stock-locations="{{ product.stock_locations or '' }}"
                                 data-tags="{{ product.tags or '' }}"
-                                data-notes="{{ product.notes or '' }}">
+                                data-notes="{{ product.notes or '' }}"
+                                onclick="return false;">
                             <i class="fas fa-edit"></i> Edit
                         </button>
                         {% endif %}
@@ -692,42 +693,44 @@
 </div>
 
 <!-- Import Progress Modal -->
-<div class="modal fade" id="importProgressModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1">
-    <div class="modal-dialog modal-lg">
+<div class="modal fade" id="importProgressModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">Importing Products</h5>
             </div>
             <div class="modal-body">
-                <div class="progress mb-3">
-                    <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 100%"></div>
+                <div class="text-center mb-3">
+                    <div id="importStatus">Processing your file...</div>
                 </div>
-                <div id="importStatus" class="text-center mb-3">Processing your file...</div>
-                <div id="importDetails" class="mt-3">
-                    <div class="row text-center mb-3">
-                        <div class="col">
-                            <h6>Total Rows</h6>
-                            <span id="processedCount" class="h4">0</span>
-                        </div>
-                        <div class="col">
-                            <h6>Imported</h6>
-                            <span id="successCount" class="h4 text-success">0</span>
-                        </div>
-                        <div class="col">
-                            <h6>Failed</h6>
-                            <span id="errorCount" class="h4 text-danger">0</span>
-                        </div>
+                <div class="progress mb-3">
+                    <div id="importProgressBar" class="progress-bar" role="progressbar" style="width: 0%"></div>
+                </div>
+                <div class="row text-center">
+                    <div class="col">
+                        <div class="h5 mb-0" id="processedCount">0</div>
+                        <small class="text-muted">Processed</small>
                     </div>
-                    <div id="errorList" class="d-none">
-                        <h6 class="text-danger">Error Details:</h6>
-                        <div class="alert alert-danger">
-                            <ul class="mb-0" id="errorDetails"></ul>
-                        </div>
+                    <div class="col">
+                        <div class="h5 mb-0" id="currentBatch">0</div>
+                        <small class="text-muted">Current Batch</small>
                     </div>
+                    <div class="col">
+                        <div class="h5 mb-0" id="successCount">0</div>
+                        <small class="text-muted">Imported</small>
+                    </div>
+                    <div class="col">
+                        <div class="h5 mb-0" id="errorCount">0</div>
+                        <small class="text-muted">Errors</small>
+                    </div>
+                </div>
+                <div id="errorList" class="mt-3 d-none">
+                    <h6 class="text-danger">Errors:</h6>
+                    <ul id="errorDetails" class="small"></ul>
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-primary" id="closeImportModal" style="display: none;">Close</button>
+                <button type="button" class="btn btn-secondary" id="closeImportModal" style="display: none;">Close</button>
             </div>
         </div>
     </div>
@@ -763,28 +766,39 @@ document.addEventListener('DOMContentLoaded', function() {
     const deleteModal = new bootstrap.Modal(document.getElementById('deleteConfirmModal'));
 
     // Edit Product Functionality
-    document.body.addEventListener('click', function(e) {
-        // Handle edit button clicks using event delegation
-        if (e.target.closest('.edit-product')) {
+    document.querySelectorAll('.edit-product').forEach(button => {
+        button.addEventListener('click', function(e) {
             e.preventDefault();
-            const button = e.target.closest('.edit-product');
             const form = document.getElementById('editProductForm');
             
-            // Get data from button attributes
-            form.querySelector('[name="id"]').value = button.dataset.id;
-            form.querySelector('[name="item_code"]').value = button.dataset.code;
-            form.querySelector('[name="description"]').value = button.dataset.description;
-            form.querySelector('[name="tamil_name"]').value = button.dataset.tamilName || '';
-            form.querySelector('[name="uom"]').value = button.dataset.uom;
-            form.querySelector('[name="price"]').value = button.dataset.price;
-            form.querySelector('[name="stock"]').value = button.dataset.stock;
-            form.querySelector('[name="restock_level"]').value = button.dataset.restockLevel;
-            form.querySelector('[name="stock_locations"]').value = button.dataset.stockLocations || '';
-            form.querySelector('[name="tags"]').value = button.dataset.tags || '';
-            form.querySelector('[name="notes"]').value = button.dataset.notes || '';
-            
+            // Get all the data from button attributes
+            const productData = {
+                id: this.getAttribute('data-id'),
+                item_code: this.getAttribute('data-item-code'),
+                description: this.getAttribute('data-description'),
+                tamil_name: this.getAttribute('data-tamil-name'),
+                uom: this.getAttribute('data-uom'),
+                price: this.getAttribute('data-price'),
+                stock: this.getAttribute('data-stock'),
+                restock_level: this.getAttribute('data-restock-level'),
+                stock_locations: this.getAttribute('data-stock-locations'),
+                tags: this.getAttribute('data-tags'),
+                notes: this.getAttribute('data-notes')
+            };
+
+            // Populate each form field
+            Object.keys(productData).forEach(key => {
+                const input = form.querySelector(`[name="${key}"]`);
+                if (input) {
+                    // Ensure we don't set undefined or null values
+                    const value = productData[key] || '';
+                    input.value = value;
+                }
+            });
+
+            // Show the modal
             editModal.show();
-        }
+        });
     });
 
     // Handle form submission
@@ -792,25 +806,23 @@ document.addEventListener('DOMContentLoaded', function() {
         const form = document.getElementById('editProductForm');
         const id = form.querySelector('[name="id"]').value;
         
+        if (!id) {
+            showAlert('Error: Product ID is missing', 'danger');
+            return;
+        }
+        
         // Create data object
-        const data = {
-            item_code: form.querySelector('[name="item_code"]').value,
-            description: form.querySelector('[name="description"]').value,
-            tamil_name: form.querySelector('[name="tamil_name"]').value,
-            uom: form.querySelector('[name="uom"]').value,
-            price: parseFloat(form.querySelector('[name="price"]').value),
-            stock: parseInt(form.querySelector('[name="stock"]').value),
-            restock_level: parseInt(form.querySelector('[name="restock_level"]').value),
-            stock_locations: form.querySelector('[name="stock_locations"]').value,
-            tags: form.querySelector('[name="tags"]').value,
-            notes: form.querySelector('[name="notes"]').value
-        };
-
-        // Remove empty values
-        Object.keys(data).forEach(key => {
-            if (data[key] === '' || data[key] === null || data[key] === undefined || 
-                (typeof data[key] === 'number' && isNaN(data[key]))) {
-                delete data[key];
+        const data = {};
+        const formData = new FormData(form);
+        
+        formData.forEach((value, key) => {
+            if (value.trim() !== '') {
+                // Convert numeric fields
+                if (['price', 'stock', 'restock_level'].includes(key)) {
+                    data[key] = key === 'price' ? parseFloat(value) : parseInt(value);
+                } else {
+                    data[key] = value;
+                }
             }
         });
 
@@ -1021,7 +1033,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // File Import Handler
     const importProgressModal = new bootstrap.Modal(document.getElementById('importProgressModal'));
     const importStatus = document.getElementById('importStatus');
+    const importProgressBar = document.getElementById('importProgressBar');
     const processedCount = document.getElementById('processedCount');
+    const currentBatch = document.getElementById('currentBatch');
     const successCount = document.getElementById('successCount');
     const errorCount = document.getElementById('errorCount');
     const errorList = document.getElementById('errorList');
@@ -1037,8 +1051,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Reset and show progress modal
         processedCount.textContent = '0';
+        currentBatch.textContent = '0';
         successCount.textContent = '0';
         errorCount.textContent = '0';
+        importProgressBar.style.width = '0%';
         errorList.classList.add('d-none');
         errorDetails.innerHTML = '';
         importStatus.textContent = 'Processing your file...';
@@ -1047,50 +1063,57 @@ document.addEventListener('DOMContentLoaded', function() {
 
         fetch('/products/import', {
             method: 'POST',
-            body: formData,
-            headers: {
-                'X-Requested-With': 'XMLHttpRequest'
-            }
+            body: formData
         })
         .then(response => response.json())
         .then(data => {
-            // Update counts
-            processedCount.textContent = data.total_count || '0';
-            successCount.textContent = data.imported_count || '0';
-            errorCount.textContent = data.error_count || '0';
-            
             if (data.success) {
-                importStatus.innerHTML = '<i class="fas fa-check-circle text-success"></i> Import completed successfully!';
+                // Update batch progress
+                const totalBatches = data.total_batches;
+                let currentBatchNum = 0;
                 
-                // Show any warnings or partial success messages
-                if (data.error_count > 0) {
-                    errorList.classList.remove('d-none');
-                    data.error_details.forEach(error => {
-                        const li = document.createElement('li');
-                        li.textContent = error;
-                        errorDetails.appendChild(li);
-                    });
+                // Function to simulate batch processing with delays
+                function updateBatchProgress() {
+                    if (currentBatchNum < totalBatches) {
+                        currentBatchNum++;
+                        const progress = (currentBatchNum / totalBatches) * 100;
+                        
+                        // Update UI
+                        importProgressBar.style.width = `${progress}%`;
+                        currentBatch.textContent = `${currentBatchNum}/${totalBatches}`;
+                        importStatus.innerHTML = `<i class="fas fa-sync fa-spin"></i> Processing batch ${currentBatchNum} of ${totalBatches}...`;
+                        
+                        // Add delay between batches (1 second)
+                        setTimeout(updateBatchProgress, 1000);
+                    } else {
+                        // Final update
+                        importStatus.innerHTML = '<i class="fas fa-check-circle text-success"></i> Import completed';
+                        importProgressBar.style.width = '100%';
+                        processedCount.textContent = data.total_count;
+                        successCount.textContent = data.imported_count;
+                        errorCount.textContent = data.error_count;
+                        
+                        // Show any errors if present
+                        if (data.error_count > 0) {
+                            errorList.classList.remove('d-none');
+                            data.error_details.forEach(error => {
+                                const li = document.createElement('li');
+                                li.textContent = error;
+                                errorDetails.appendChild(li);
+                            });
+                        }
+                        
+                        // Reload page after completion
+                        setTimeout(() => location.reload(), 2000);
+                    }
                 }
                 
-                // Enable close button and auto-reload
-                closeImportModal.style.display = 'block';
-                closeImportModal.onclick = () => {
-                    importProgressModal.hide();
-                    location.reload();
-                };
-                
-                // Auto reload after 3 seconds if no errors
-                if (data.error_count === 0) {
-                    setTimeout(() => {
-                        importProgressModal.hide();
-                        location.reload();
-                    }, 3000);
-                }
+                // Start batch progress simulation
+                updateBatchProgress();
             } else {
                 importStatus.innerHTML = '<i class="fas fa-times-circle text-danger"></i> Import failed';
                 errorList.classList.remove('d-none');
                 
-                // Show error details
                 if (data.error_details && data.error_details.length > 0) {
                     data.error_details.forEach(error => {
                         const li = document.createElement('li');
@@ -1103,9 +1126,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     errorDetails.appendChild(li);
                 }
                 
-                // Enable close button
+                importProgressBar.style.width = '100%';
                 closeImportModal.style.display = 'block';
-                closeImportModal.onclick = () => importProgressModal.hide();
             }
         })
         .catch(error => {
@@ -1116,10 +1138,8 @@ document.addEventListener('DOMContentLoaded', function() {
             li.textContent = 'Network error occurred. Please try again.';
             errorDetails.appendChild(li);
             closeImportModal.style.display = 'block';
-            closeImportModal.onclick = () => importProgressModal.hide();
         })
         .finally(() => {
-            // Reset file input
             input.value = '';
         });
     };

@@ -19,51 +19,20 @@ var/
 *.egg-info/
 .installed.cfg
 *.egg
-.env
 
 # Virtual Environment
 venv/
 ENV/
-.venv
-.env.local
-.env.*.local
 
 # IDE
 .idea/
 .vscode/
 *.swp
 *.swo
-.DS_Store
-
-# Database
-*.db
-*.sqlite3
-*.sqlite
-
-# Logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
 
 # Local development
 instance/
-.webassets-cache/
-.pytest_cache/
-.coverage
-htmlcov/
-
-# Media files
-media/
-static/wallpapers/
-uploads/
-
-# Temporary files
-*.tmp
-*.bak
-*.swp
-*~
-
-# Node modules if you add any JS packages later
-node_modules/ 
+.env
+*.db
+.vercel 
 .vercel

@@ -1,0 +1,8 @@
+name = "lekho-proxy"
+type = "javascript"
+account_id = "your_account_id"
+workers_dev = true
+
+[env.production]
+workers_dev = true 
+route = "lekho.vercel.app/*" 

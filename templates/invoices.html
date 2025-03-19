@@ -154,8 +154,10 @@
     <div class="card-header d-flex justify-content-between align-items-center">
         <h5 class="mb-0">Invoices List</h5>
         <div>
+            {% if current_user.role == 'admin' %}
             <button type="button" class="btn btn-danger" id="delete-all-no-restore">Delete All (No Stock Restore)</button>
             <button type="button" class="btn btn-warning" id="delete-all-restore">Delete All (Restore Stock)</button>
+            {% endif %}
             <button type="button" class="btn btn-secondary" id="print-summary">Print Summary</button>
             <a href="/new_invoice" class="btn btn-primary">Create New Invoice</a>
         </div>
@@ -349,26 +351,30 @@
 document.addEventListener('DOMContentLoaded', function() {
     // Set today's date by default
     const today = new Date().toISOString().split('T')[0];
-    document.getElementById('start-date').value = today;
-    document.getElementById('end-date').value = today;
+    const startDate = document.getElementById('start-date');
+    const endDate = document.getElementById('end-date');
+    if (startDate) startDate.value = today;
+    if (endDate) endDate.value = today;
     
     // Date filter
     const filterForm = document.getElementById('filter-form');
-    const startDate = document.getElementById('start-date');
-    const endDate = document.getElementById('end-date');
-    
-    filterForm.addEventListener('submit', function(e) {
-        e.preventDefault();
-        const params = new URLSearchParams({
-            start_date: startDate.value,
-            end_date: endDate.value
+    if (filterForm) {
+        filterForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const params = new URLSearchParams({
+                start_date: startDate.value,
+                end_date: endDate.value
+            });
+            window.location.href = `/invoices?${params.toString()}`;
         });
-        window.location.href = `/invoices?${params.toString()}`;
-    });
+    }
     
-    document.getElementById('reset-filter').addEventListener('click', function() {
-        window.location.href = '/invoices';
-    });
+    const resetFilter = document.getElementById('reset-filter');
+    if (resetFilter) {
+        resetFilter.addEventListener('click', function() {
+            window.location.href = '/invoices';
+        });
+    }
     
     // View invoice details (both desktop and mobile)
     document.querySelectorAll('.view-invoice').forEach(button => {
@@ -377,10 +383,8 @@ document.addEventListener('DOMContentLoaded', function() {
             const detailsRow = document.getElementById(`details-${id}`);
             const mobileDetails = document.getElementById(`mobile-details-${id}`);
             
-            // Handle desktop view
             if (detailsRow) {
                 if (detailsRow.style.display === 'none') {
-                    // Hide all other detail rows
                     document.querySelectorAll('.invoice-details-row').forEach(row => {
                         row.style.display = 'none';
                     });
@@ -390,10 +394,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
             
-            // Handle mobile view
             if (mobileDetails) {
                 if (mobileDetails.style.display === 'none') {
-                    // Hide all other mobile details
                     document.querySelectorAll('.mobile-invoice-details').forEach(details => {
                         details.style.display = 'none';
                     });
@@ -433,17 +435,24 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // Delete all invoices
-    document.getElementById('delete-all-no-restore').addEventListener('click', function() {
-        if (confirm('Are you sure you want to delete ALL invoices without restoring stock? This action cannot be undone!')) {
-            deleteAllInvoices(false);
-        }
-    });
+    const deleteAllNoRestore = document.getElementById('delete-all-no-restore');
+    const deleteAllRestore = document.getElementById('delete-all-restore');
+    
+    if (deleteAllNoRestore) {
+        deleteAllNoRestore.addEventListener('click', function() {
+            if (confirm('Are you sure you want to delete ALL invoices without restoring stock? This action cannot be undone!')) {
+                deleteAllInvoices(false);
+            }
+        });
+    }
 
-    document.getElementById('delete-all-restore').addEventListener('click', function() {
-        if (confirm('Are you sure you want to delete ALL invoices and restore stock? This action cannot be undone!')) {
-            deleteAllInvoices(true);
-        }
-    });
+    if (deleteAllRestore) {
+        deleteAllRestore.addEventListener('click', function() {
+            if (confirm('Are you sure you want to delete ALL invoices and restore stock? This action cannot be undone!')) {
+                deleteAllInvoices(true);
+            }
+        });
+    }
 
     function deleteInvoice(id, restoreStock) {
         fetch(`/invoices/${id}`, {
@@ -462,12 +471,16 @@ document.addEventListener('DOMContentLoaded', function() {
             } else {
                 alert('Error deleting invoice: ' + data.error);
             }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error deleting invoice');
         });
     }
 
     function deleteAllInvoices(restoreStock) {
-        fetch('/invoices/delete_all', {
-            method: 'DELETE',
+        fetch('/settings/delete-invoices', {
+            method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
@@ -505,20 +518,22 @@ document.addEventListener('DOMContentLoaded', function() {
         window.open(`/invoices/print_summary?${params.toString()}`, '_blank');
     });
 
-    // Add View All Details functionality
-    document.getElementById('view-all-details').addEventListener('click', function() {
-        const startDate = document.getElementById('start_date').value;
-        const endDate = document.getElementById('end_date').value;
-        
-        // Open all invoices in the date range in new tabs
-        document.querySelectorAll('table tbody tr').forEach(row => {
-            const viewBtn = row.querySelector('.view-invoice');
-            if (viewBtn) {
-                const invoiceId = viewBtn.dataset.id;
-                window.open(`/invoices/${invoiceId}/print`, '_blank');
-            }
+    // View All Details functionality
+    const viewAllDetailsBtn = document.getElementById('view-all-details');
+    if (viewAllDetailsBtn) {
+        viewAllDetailsBtn.addEventListener('click', function() {
+            const startDate = document.getElementById('start_date')?.value;
+            const endDate = document.getElementById('end_date')?.value;
+            
+            document.querySelectorAll('table tbody tr').forEach(row => {
+                const viewBtn = row.querySelector('.view-invoice');
+                if (viewBtn) {
+                    const invoiceId = viewBtn.dataset.id;
+                    window.open(`/invoices/${invoiceId}/print`, '_blank');
+                }
+            });
         });
-    });
+    }
 });
 </script>
 {% endblock %} 

@@ -21,6 +21,7 @@ from pyotp import random_base32, TOTP
 import traceback
 import psycopg2
 from psycopg2.extras import DictCursor
+import time
 
 # Load environment variables
 load_dotenv()
@@ -284,7 +285,7 @@ def init_permissions():
         ('view_product_price', 'Can view product prices'),
         ('edit_product_price', 'Can edit product prices'),
         ('view_product_stock', 'Can view product stock levels'),
-        ('view_invoice_stock', 'Can view stock in invoice search dropdown'),  # New permission
+        ('view_invoice_stock', 'Can view stock in invoice search dropdown'),
         ('edit_product_stock', 'Can edit product stock levels'),
         ('view_product_restock', 'Can view product restock levels'),
         ('edit_product_restock', 'Can edit product restock levels'),
@@ -295,7 +296,6 @@ def init_permissions():
         ('view_product_notes', 'Can view product notes'),
         ('edit_product_notes', 'Can edit product notes'),
         ('view_product_suppliers', 'Can view product suppliers'),
-        ('view_reports', 'Can view reports'),
         ('manage_settings', 'Can manage system settings'),
         ('manage_users', 'Can manage users'),
         ('view_suppliers', 'Can view suppliers list'),
@@ -367,109 +367,68 @@ def get_user(user_id):
 # Add to template context
 app.jinja_env.globals.update(get_user=get_user)
 
+@app.context_processor
+def utility_processor():
+    def check_permission(permission_name):
+        if 'user_id' not in session:
+            return False
+        if session.get('is_admin', False):
+            return True
+        return permission_name in session.get('permissions', [])
+    
+    def get_user(user_id):
+        return User.query.get(user_id)
+    
+    return {
+        'check_permission': check_permission,
+        'get_user': get_user
+    }
+
 # Create tables and add sample data
 def init_db():
     with app.app_context():
-        # Drop all tables
-        db.drop_all()
-        # Create all tables
-        db.create_all()
-        
-        # Initialize permissions first
-        init_permissions()
-        
-        # Create admin user if none exists
-        admin_user = User.query.filter_by(role='admin').first()
-        if not admin_user:
-            admin_user = User(
-                username='admin',
-                password=generate_password_hash('admin'),
-                role='admin'
-            )
-            db.session.add(admin_user)
-            db.session.commit()
+        try:
+            # Create all tables
+            db.create_all()
+            
+            # Initialize permissions first
+            init_permissions()
+            
+            # Create admin user if none exists
+            admin_user = User.query.filter_by(role='admin').first()
+            if not admin_user:
+                admin_user = User(
+                    username='admin',
+                    password=generate_password_hash('admin'),
+                    role='admin'
+                )
+                db.session.add(admin_user)
+                db.session.commit()
+                print("Admin user created successfully")
 
-        # Initialize settings if not exists
-        settings = Settings.query.first()
-        if not settings:
-            settings = Settings(calculator_code='9999')
-            db.session.add(settings)
-            db.session.commit()
-        
-        # Add some sample customers
-        sample_customers = [
-            Customer(
-                name='John Doe',
-                phone='1234567890',
-                email='john@example.com',
-                address='123 Main St'
-            ),
-            Customer(
-                name='Jane Smith',
-                phone='9876543210',
-                email='jane@example.com',
-                address='456 Oak Ave'
-            )
-        ]
-        
-        for customer in sample_customers:
-            db.session.add(customer)
-        
-        # Add some sample products with restock levels
-        sample_products = [
-            Product(
-                item_code='2714',
-                description='AGAL FANCY RPS 1',
-                uom='PCS',
-                price=55.0,
-                stock=100,
-                restock_level=50,
-                stock_locations='Shelf A, Rack 1',
-                tags='pooja items, agal',
-                notes='Popular item during festival season'
-            ),
-            Product(
-                item_code='33846',
-                description='11423 3 CANDANPIYALI',
-                uom='PCS',
-                price=210.0,
-                stock=50,
-                restock_level=75,
-                stock_locations='Shelf B, Box 3',
-                tags='fragile, premium',
-                notes='Handle with care, premium product'
-            ),
-            Product(
-                item_code='2959',
-                description='ABISHEKAM SIVLING RPS',
-                uom='kgs',
-                price=900.0,
-                stock=75,
-                restock_level=100,
-                stock_locations='Shelf C',
-                tags='heavy, temple items',
-                notes='Special packaging required'
-            ),
-            Product(
-                item_code='2324',
-                description='AGAL KAMAL DEEP 1 LW',
-                uom='PCS',
-                price=60.0,
-                stock=200,
-                restock_level=150,
-                stock_locations='Shelf A, Rack 2',
-                tags='pooja items, agal, popular',
-                notes='High demand during Diwali'
-            ),
-        ]
-        
-        for product in sample_products:
-            db.session.add(product)
-        
-        db.session.commit()
+            # Initialize settings if not exists
+            settings = Settings.query.first()
+            if not settings:
+                settings = Settings(calculator_code='9999')
+                db.session.add(settings)
+                db.session.commit()
+                
+        except Exception as e:
+            db.session.rollback()
+            print(f"Error in init_db: {str(e)}")
+            raise
 
 # Helper function to delete invoices and invoice items
-def _delete_all_invoices():
+def _delete_all_invoices(restore_stock=False):
+    # Get all invoices and their items before deletion
+    invoices = Invoice.query.all()
+    
+    if restore_stock:
+        # Restore stock for all items
+        for invoice in invoices:
+            for item in invoice.items:
+                item.product.stock += item.quantity
+    
     InvoiceItem.query.delete()
     Invoice.query.delete()
 
@@ -483,58 +442,71 @@ def _delete_all_products():
 @app.route('/')
 @login_required
 def index():
-    cached_data = cache.get('dashboard_data')
-    if cached_data is not None:
-        return cached_data
+    try:
+        # Get current user
+        user = User.query.get(session['user_id'])
+        if not user:
+            session.clear()
+            return redirect(url_for('login'))
+
+        # Get settings
+        settings = Settings.query.first()
+        wallpaper_url = url_for('static', filename=f'wallpapers/{settings.wallpaper_path}') if settings and settings.wallpaper_path else None
+
+        # Initialize stats dictionary
+        stats = {
+            'total_products': 0,
+            'total_invoices': 0,
+            'total_sales': 0,
+            'recent_invoices': [],
+            'low_stock_products': [],
+            'total_inventory_cost': 0,
+            'stockout_count': 0
+        }
+
+        # Only show stats if user has appropriate permissions
+        if user.role == 'admin' or user.has_any_permission([
+            'view_products', 'view_invoices', 'view_product_stock'
+        ]):
+            try:
+                # Get basic stats that most users should see
+                if user.has_permission('view_products'):
+                    stats['total_products'] = db.session.query(func.count(Product.id)).scalar() or 0
+
+                if user.has_permission('view_invoices'):
+                    stats['total_invoices'] = db.session.query(func.count(Invoice.id)).scalar() or 0
+                    stats['total_sales'] = db.session.query(func.sum(Invoice.total_amount)).scalar() or 0
+                    stats['recent_invoices'] = Invoice.query.order_by(Invoice.date.desc()).limit(5).all()
+
+                # Stock-related stats for users with stock permissions
+                if user.has_permission('view_product_stock'):
+                    stats['low_stock_products'] = Product.query.filter(
+                        Product.stock <= Product.restock_level
+                    ).all()
+                    stats['stockout_count'] = db.session.query(
+                        func.count(Product.id)
+                    ).filter(Product.stock == 0).scalar() or 0
+                    
+                    # Calculate total inventory cost
+                    total_inventory = db.session.query(
+                        func.sum(Product.stock * Product.price)
+                    ).scalar()
+                    stats['total_inventory_cost'] = total_inventory or 0
+
+            except Exception as e:
+                print(f"Error calculating stats: {str(e)}")
+                # Continue with empty stats rather than failing completely
+
+        # Render template
+        return render_template('index.html', 
+                            stats=stats, 
+                            wallpaper_url=wallpaper_url,
+                            user=user)
         
-    # Get current user
-    user = User.query.get(session['user_id'])
-    
-    # Get products that are at or below their restock level
-    low_stock_products = Product.query.filter(Product.stock <= Product.restock_level).all()
-    
-    # Get recent invoices
-    recent_invoices = Invoice.query.order_by(Invoice.date.desc()).limit(5).all()
-    
-    # Get settings
-    settings = Settings.query.first()
-    wallpaper_url = url_for('static', filename=f'wallpapers/{settings.wallpaper_path}') if settings and settings.wallpaper_path else None
-    
-    # Calculate total inventory cost
-    total_inventory_cost = sum(product.stock * product.price for product in Product.query.all())
-    
-    # Calculate stock-out count
-    stockout_count = Product.query.filter(Product.stock == 0).count()
-    
-    # Calculate average stock-to-sales ratio
-    products = Product.query.all()
-    total_ratio = 0
-    products_with_sales = 0
-    for product in products:
-        total_sales = db.session.query(func.sum(InvoiceItem.quantity)).filter(
-            InvoiceItem.product_id == product.id
-        ).scalar() or 0
-        if total_sales > 0:
-            total_ratio += product.stock / total_sales
-            products_with_sales += 1
-    avg_stock_sales_ratio = total_ratio / products_with_sales if products_with_sales > 0 else 0
-    
-    stats = {
-        'total_products': Product.query.count(),
-        'total_invoices': Invoice.query.count(),
-        'total_sales': db.session.query(db.func.sum(Invoice.total_amount)).scalar() or 0,
-        'recent_invoices': recent_invoices,
-        'low_stock_products': low_stock_products,
-        'total_inventory_cost': total_inventory_cost,
-        'stockout_count': stockout_count,
-        'avg_stock_sales_ratio': avg_stock_sales_ratio,
-        'slow_moving_count': 0,
-        'stockout_frequency': []
-    }
-    
-    response = render_template('index.html', stats=stats, wallpaper_url=wallpaper_url)
-    cache.set('dashboard_data', response, timeout=60)  # Cache for 1 minute
-    return response
+    except Exception as e:
+        print(f"Error in index route: {str(e)}")
+        db.session.rollback()
+        return "An error occurred. Please try again.", 500
 
 @app.route('/products/search')
 @login_required
@@ -590,8 +562,7 @@ def search_products():
 def products():
     if request.method == 'POST':
         # Check if user has edit permission
-        current_user = User.query.get(session['user_id'])
-        if not (current_user.role == 'admin' or current_user.has_permission('edit_products')):
+        if not session.get('is_admin', False) and 'edit_products' not in session.get('permissions', []):
             return jsonify({'success': False, 'error': 'Permission denied'})
             
         data = request.json
@@ -634,26 +605,41 @@ def products():
             db.session.rollback()
             return jsonify({'success': False, 'error': str(e)})
     
-    # Get current user for permission checks in template
-    current_user = User.query.get(session['user_id'])
-    
-    # Pagination parameters
+    # GET request handling
     page = request.args.get('page', 1, type=int)
-    per_page = 50  # Number of items per page
+    per_page = request.args.get('per_page', 50, type=int)
     
-    # Get total count for pagination
-    total_count = Product.query.count()
-    total_pages = (total_count + per_page - 1) // per_page
+    # Generate cache key based on page and per_page
+    cache_key = f'products_page_{page}_{per_page}'
+    cached_data = cache.get(cache_key)
     
-    # Get paginated products
-    products = Product.query.order_by(Product.item_code).paginate(page=page, per_page=per_page, error_out=False)
+    if cached_data:
+        return cached_data
     
-    return render_template('products.html', 
-                         products=products.items,
-                         current_user=current_user,
-                         pagination=products,
-                         total_pages=total_pages,
-                         current_page=page)
+    # Query with pagination
+    pagination = Product.query.order_by(Product.item_code).paginate(
+        page=page, 
+        per_page=per_page,
+        error_out=False
+    )
+    
+    products = pagination.items
+    total_pages = pagination.pages
+    total_items = pagination.total
+    
+    response = render_template(
+        'products.html',
+        products=products,
+        pagination=pagination,
+        total_pages=total_pages,
+        total_items=total_items,
+        current_page=page
+    )
+    
+    # Cache the response for 5 minutes
+    cache.set(cache_key, response, timeout=300)
+    
+    return response
 
 @app.route('/products/<int:id>', methods=['PUT'])
 @login_required
@@ -937,35 +923,41 @@ def print_summary():
 def import_products():
     try:
         if 'file' not in request.files:
-            print("No file in request.files")  # Debug log
+            print("No file in request.files")
             return jsonify({'success': False, 'error': 'No file uploaded'}), 400
 
         file = request.files['file']
         if file.filename == '':
-            print("Empty filename")  # Debug log
+            print("Empty filename")
             return jsonify({'success': False, 'error': 'No file selected'}), 400
         
         if not file.filename.endswith(('.xlsx', '.xls')):
-            print(f"Invalid file type: {file.filename}")  # Debug log
+            print(f"Invalid file type: {file.filename}")
             return jsonify({'success': False, 'error': 'Invalid file format. Please upload an Excel file.'}), 400
         
-        print(f"Processing file: {file.filename}")  # Debug log
+        print(f"Processing file: {file.filename}")
         
         # Initialize counters and error list
         total_count = 0
         imported_count = 0
         error_details = []
         products = []
+        batch_size = 20
+        current_batch = []
+        batch_number = 0
         
         try:
             # Read the Excel file
             wb = openpyxl.load_workbook(file, data_only=True)
             sheet = wb.active
             
+            # Get total number of rows for progress calculation
+            total_rows = sum(1 for row in sheet.iter_rows(min_row=2) if any(cell.value for cell in row))
+            
             # Validate header row
             header_row = next(sheet.iter_rows(min_row=1, max_row=1))
             if len(header_row) < 6:
-                print("Invalid header row")  # Debug log
+                print("Invalid header row")
                 return jsonify({'success': False, 'error': 'Invalid file format. Missing required columns.'}), 400
             
             # Process data rows
@@ -987,7 +979,7 @@ def import_products():
                         stock = int(float(str(row[5].value or '0').replace(',', '')))
                     except (ValueError, TypeError) as e:
                         error_details.append(f"Row {row_idx}: Invalid price or stock value")
-                        print(f"Error parsing price/stock in row {row_idx}: {str(e)}")  # Debug log
+                        print(f"Error parsing price/stock in row {row_idx}: {str(e)}")
                         continue
                     
                     product = {
@@ -1002,39 +994,25 @@ def import_products():
                         'tags': str(row[8].value).strip() if len(row) > 8 and row[8].value else None,
                         'notes': str(row[9].value).strip() if len(row) > 9 and row[9].value else None
                     }
-                    products.append(product)
-                    print(f"Processed row {row_idx}: {product['item_code']}")  # Debug log
+                    current_batch.append(product)
+                    
+                    # Process batch when it reaches batch_size
+                    if len(current_batch) >= batch_size:
+                        batch_number += 1
+                        batch_result = process_product_batch(current_batch, error_details, batch_number)
+                        imported_count += batch_result
+                        current_batch = []
+                        time.sleep(1)  # Add a 1-second delay between batches
+                        
                 except Exception as e:
                     error_details.append(f"Row {row_idx}: {str(e)}")
-                    print(f"Error processing row {row_idx}: {str(e)}")  # Debug log
+                    print(f"Error processing row {row_idx}: {str(e)}")
                     continue
             
-            # Import products
-            for product_data in products:
-                try:
-                    # Validate item_code format
-                    if not product_data['item_code'] or len(product_data['item_code']) > 20:
-                        error_details.append(f"Invalid item code format: {product_data['item_code']}")
-                        continue
-                    
-                    product = Product.query.filter_by(item_code=product_data['item_code']).first()
-                    if product:
-                        # Update existing product
-                        for key, value in product_data.items():
-                            setattr(product, key, value)
-                    else:
-                        # Create new product
-                        product = Product(**product_data)
-                        db.session.add(product)
-                    
-                    db.session.commit()
-                    imported_count += 1
-                    print(f"Imported product: {product_data['item_code']}")  # Debug log
-                except Exception as e:
-                    db.session.rollback()
-                    error_details.append(f"Error with item code {product_data['item_code']}: {str(e)}")
-                    print(f"Error importing product {product_data['item_code']}: {str(e)}")  # Debug log
-                    continue
+            # Process remaining products in the last batch
+            if current_batch:
+                batch_number += 1
+                imported_count += process_product_batch(current_batch, error_details, batch_number)
             
             response_data = {
                 'success': imported_count > 0,
@@ -1042,13 +1020,14 @@ def import_products():
                 'total_count': total_count,
                 'imported_count': imported_count,
                 'error_count': len(error_details),
-                'error_details': error_details
+                'error_details': error_details,
+                'total_batches': batch_number
             }
-            print(f"Import completed: {response_data}")  # Debug log
+            print(f"Import completed: {response_data}")
             return jsonify(response_data), 200 if imported_count > 0 else 400
             
         except Exception as e:
-            print(f"Error reading Excel file: {str(e)}")  # Debug log
+            print(f"Error reading Excel file: {str(e)}")
             return jsonify({
                 'success': False,
                 'error': f"Error reading Excel file: {str(e)}",
@@ -1059,12 +1038,47 @@ def import_products():
             }), 400
             
     except Exception as e:
-        print(f"Unexpected error: {str(e)}")  # Debug log
+        print(f"Unexpected error: {str(e)}")
         return jsonify({
             'success': False,
             'error': f"Import failed: {str(e)}",
             'details': traceback.format_exc()
         }), 500
+
+def process_product_batch(batch, error_details, batch_number):
+    """Process a batch of products and return the number of successfully imported products"""
+    imported_count = 0
+    
+    print(f"Processing batch {batch_number} with {len(batch)} products")
+    
+    for product_data in batch:
+        try:
+            # Validate item_code format
+            if not product_data['item_code'] or len(product_data['item_code']) > 20:
+                error_details.append(f"Invalid item code format: {product_data['item_code']}")
+                continue
+            
+            product = Product.query.filter_by(item_code=product_data['item_code']).first()
+            if product:
+                # Update existing product
+                for key, value in product_data.items():
+                    setattr(product, key, value)
+            else:
+                # Create new product
+                product = Product(**product_data)
+                db.session.add(product)
+            
+            db.session.commit()
+            imported_count += 1
+            print(f"Imported product: {product_data['item_code']}")
+        except Exception as e:
+            db.session.rollback()
+            error_details.append(f"Error with item code {product_data['item_code']}: {str(e)}")
+            print(f"Error importing product {product_data['item_code']}: {str(e)}")
+            continue
+    
+    print(f"Completed batch {batch_number}: {imported_count} products imported successfully")
+    return imported_count
 
 @app.route('/products/export')
 @login_required
@@ -1460,7 +1474,9 @@ def restore_data():
 @admin_required
 def delete_invoices():
     try:
-        _delete_all_invoices()
+        data = request.json
+        restore_stock = data.get('restore_stock', False)
+        _delete_all_invoices(restore_stock)
         db.session.commit()
         return jsonify({'success': True})
     except Exception as e:
@@ -1516,776 +1532,42 @@ def delete_print_template(id):
 
 @app.route('/api/sales_trend')
 def sales_trend():
-    try:
-        # Get sales data for the last 30 days
-        end_date = date.today()
-        start_date = end_date - timedelta(days=29)
-        
-        sales_data = db.session.query(
-            func.date(Invoice.date).label('date'),
-            func.sum(Invoice.total_amount).label('total')
-        ).filter(
-            Invoice.date >= start_date,
-            Invoice.date <= end_date
-        ).group_by(
-            func.date(Invoice.date)
-        ).order_by(
-            func.date(Invoice.date)
-        ).all()
-        
-        # Create a dictionary of dates and sales
-        sales_dict = {row.date.strftime('%Y-%m-%d'): float(row.total) for row in sales_data}
-        
-        # Fill in missing dates with zero
-        labels = []
-        values = []
-        current_date = start_date
-        while current_date <= end_date:
-            date_str = current_date.strftime('%Y-%m-%d')
-            labels.append(date_str)
-            values.append(sales_dict.get(date_str, 0))
-            current_date += timedelta(days=1)
-        
-        return jsonify({
-            'labels': labels,
-            'values': values
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    return jsonify({'labels': [], 'values': []})
 
 @app.route('/api/top_products')
 def top_products():
-    try:
-        # Get top 5 selling products
-        top_products = db.session.query(
-            Product.description,
-            func.sum(InvoiceItem.quantity).label('total_quantity')
-        ).join(
-            InvoiceItem, Product.id == InvoiceItem.product_id
-        ).group_by(
-            Product.id
-        ).order_by(
-            func.sum(InvoiceItem.quantity).desc()
-        ).limit(5).all()
-        
-        return jsonify({
-            'labels': [p.description for p in top_products],
-            'values': [float(p.total_quantity) for p in top_products]
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/invoices/delete_all', methods=['DELETE'])
-def delete_all_invoices():
-    data = request.json
-    restore_stock = data.get('restore_stock', False)
-    
-    try:
-        if restore_stock:
-            # Restore stock for all items before deleting
-            invoices = Invoice.query.all()
-            for invoice in invoices:
-                for item in invoice.items:
-                    item.product.stock += item.quantity
-        
-        # Delete all invoice items and invoices
-        _delete_all_invoices()
-        db.session.commit()
-        return jsonify({'success': True})
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'success': False, 'error': str(e)})
-
-@app.route('/products/import-json', methods=['POST'])
-def import_products_json():
-    try:
-        data = request.json
-        if not data or 'products' not in data:
-            return jsonify({'success': False, 'error': 'No data provided'})
-
-        products = data['products']
-        if not products:
-            return jsonify({'success': False, 'error': 'No products found in data'})
-
-        # Process the products
-        for product_data in products:
-            # Validate required fields
-            if not all(key in product_data for key in ['item_code', 'description', 'uom', 'price', 'stock']):
-                continue
-
-            try:
-                # Convert types and validate
-                product_data['price'] = float(product_data['price'])
-                product_data['stock'] = int(product_data['stock'])
-                
-                # Find existing product or create new one
-                product = Product.query.filter_by(item_code=product_data['item_code']).first()
-                if product:
-                    # Update existing product
-                    product.description = product_data['description']
-                    product.uom = product_data['uom']
-                    product.price = product_data['price']
-                    product.stock = product_data['stock']
-                else:
-                    # Create new product
-                    product = Product(**product_data)
-                    db.session.add(product)
-                    
-            except (ValueError, TypeError) as e:
-                continue  # Skip invalid rows
-                
-        db.session.commit()
-        return jsonify({
-            'success': True,
-            'message': f'Successfully imported {len(products)} products'
-        })
-        
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'success': False, 'error': str(e)})
-
-@app.route('/invoices/<int:invoice_id>/download')
-def download_invoice(invoice_id):
-    try:
-        # Get invoice data
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        # Get invoice details
-        cursor.execute('''
-            SELECT i.order_number, i.date, i.customer_name, i.total_amount,
-                   ii.product_id, ii.quantity, ii.price, ii.amount,
-                   p.name as product_name, p.code as product_code
-            FROM invoices i
-            JOIN invoice_items ii ON i.id = ii.invoice_id
-            JOIN products p ON ii.product_id = p.id
-            WHERE i.id = ?
-        ''', (invoice_id,))
-        
-        rows = cursor.fetchall()
-        if not rows:
-            return 'Invoice not found', 404
-            
-        # Create invoice data structure
-        invoice = {
-            'order_number': rows[0][0],
-            'date': rows[0][1],
-            'customer_name': rows[0][2],
-            'total_amount': rows[0][3],
-            'items': []
-        }
-        
-        for row in rows:
-            invoice['items'].append({
-                'product_code': row[9],
-                'product_name': row[8],
-                'quantity': row[5],
-                'price': row[6],
-                'amount': row[7]
-            })
-        
-        # Create PDF
-        buffer = BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=letter)
-        elements = []
-        styles = getSampleStyleSheet()
-        
-        # Add title
-        title_style = ParagraphStyle(
-            'CustomTitle',
-            parent=styles['Heading1'],
-            fontSize=16,
-            spaceAfter=30
-        )
-        elements.append(Paragraph(f"Invoice #{invoice['order_number']}", title_style))
-        
-        # Add invoice details
-        elements.append(Paragraph(f"Date: {invoice['date']}", styles['Normal']))
-        elements.append(Paragraph(f"Customer: {invoice['customer_name']}", styles['Normal']))
-        elements.append(Spacer(1, 20))
-        
-        # Create table for items
-        data = [['S.No', 'Code', 'Product', 'Quantity', 'Price', 'Total']]
-        for idx, item in enumerate(invoice['items'], 1):
-            data.append([
-                str(idx),
-                item['product_code'],
-                item['product_name'],
-                f"{item['quantity']:.2f}",
-                f"₹{item['price']:.2f}",
-                f"₹{item['amount']:.2f}"
-            ])
-        
-        # Add total row
-        data.append(['', '', '', '', 'Total:', f"₹{invoice['total_amount']:.2f}"])
-        
-        # Create and style the table
-        table = Table(data)
-        table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 12),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, -1), (-1, -1), colors.beige),
-            ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
-            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, -1), (-1, -1), 10),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black),
-            ('BOX', (0, 0), (-1, -1), 2, colors.black),
-            ('ALIGN', (3, 1), (-1, -1), 'RIGHT'),  # Right align numbers
-        ]))
-        
-        elements.append(table)
-        doc.build(elements)
-        
-        buffer.seek(0)
-        response = make_response(buffer.getvalue())
-        response.headers['Content-Type'] = 'application/pdf'
-        response.headers['Content-Disposition'] = f'attachment; filename=invoice_{invoice_id}.pdf'
-        
-        return response
-        
-    except Exception as e:
-        print(f"Error generating PDF: {str(e)}")
-        return 'Error generating PDF', 500
-    finally:
-        if conn:
-            conn.close()
-
-@app.route('/products/<int:id>/stock', methods=['POST'])
-@login_required
-@permission_required('manage_stock')
-def update_product_stock(id):
-    try:
-        product = Product.query.get_or_404(id)
-        data = request.json
-        change = data.get('change', 0)
-        
-        # Update stock
-        product.stock += change
-        db.session.commit()
-        
-        return jsonify({
-            'success': True,
-            'new_stock': product.stock
-        })
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        })
-
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-        totp_token = request.form.get('totp_token')
-        
-        user = User.query.filter_by(username=username).first()
-        if user and check_password_hash(user.password, password):
-            if user.totp_enabled:
-                if not totp_token:
-                    flash('2FA token required')
-                    return redirect(url_for('login'))
-                
-                totp = TOTP(user.totp_secret)
-                if not totp.verify(totp_token):
-                    flash('Invalid 2FA token')
-                    return redirect(url_for('login'))
-            
-            session['user_id'] = user.id
-            session['logged_in'] = True
-            return redirect(url_for('index'))
-        else:
-            flash('Invalid username or password')
-            return redirect(url_for('login'))
-    
-    return render_template('login.html')
-
-@app.route('/logout')
-def logout():
-    session.clear()
-    return redirect(url_for('login'))
-
-@app.before_request
-def require_login():
-    # List of routes that don't require login
-    public_routes = ['login', 'static']
-    
-    # Check if the requested endpoint is in public routes
-    if request.endpoint and request.endpoint not in public_routes:
-        if 'logged_in' not in session:
-            return redirect(url_for('login'))
-
-@app.route('/users')
-@login_required
-@admin_required
-def users():
-    users_list = User.query.all()
-    permissions = Permission.query.all()
-    return render_template('users.html', users=users_list, permissions=permissions)
-
-@app.route('/users', methods=['POST'])
-@login_required
-@permission_required('manage_settings')
-def add_user():
-    data = request.get_json()
-    
-    if User.query.filter_by(username=data['username']).first():
-        return jsonify({'error': 'Username already exists'}), 400
-    
-    hashed_password = generate_password_hash(data['password'])
-    new_user = User(
-        username=data['username'],
-        password=hashed_password,
-        role=data['role'],
-        totp_enabled=data.get('totp_enabled', False)
-    )
-    
-    # Add permissions if not admin
-    if data['role'] != 'admin' and 'permissions' in data:
-        permissions = Permission.query.filter(Permission.id.in_(data['permissions'])).all()
-        new_user.permissions = permissions
-    
-    try:
-        db.session.add(new_user)
-        db.session.commit()
-        return jsonify({'success': True})
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/users/<int:id>', methods=['PUT'])
-@login_required
-@permission_required('manage_settings')
-def update_user(id):
-    user = User.query.get_or_404(id)
-    data = request.get_json()
-    
-    if data['username'] != user.username and User.query.filter_by(username=data['username']).first():
-        return jsonify({'error': 'Username already exists'}), 400
-    
-    try:
-        user.username = data['username']
-        user.role = data['role']
-        if data.get('password'):
-            user.password = generate_password_hash(data['password'])
-        
-        # Update permissions if not admin
-        if data['role'] != 'admin':
-            permissions = Permission.query.filter(Permission.id.in_(data.get('permissions', []))).all()
-            user.permissions = permissions
-        else:
-            user.permissions = []  # Clear permissions for admin as they have all permissions
-        
-        # Handle 2FA changes
-        user.totp_enabled = data.get('totp_enabled', False)
-        if user.totp_enabled and 'totp_secret' in data:
-            user.totp_secret = data['totp_secret']
-        elif not user.totp_enabled:
-            user.totp_secret = None
-        
-        db.session.commit()
-        return jsonify({'success': True})
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/users/<int:id>', methods=['DELETE'])
-@login_required
-@permission_required('manage_settings')
-def delete_user(id):
-    if id == session.get('user_id'):
-        return jsonify({'error': 'Cannot delete your own account'}), 400
-    
-    user = User.query.get_or_404(id)
-    try:
-        db.session.delete(user)
-        db.session.commit()
-        return jsonify({'success': True})
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/users/<int:id>/permissions')
-@login_required
-@permission_required('manage_settings')
-def get_user_permissions(id):
-    user = User.query.get_or_404(id)
-    return jsonify({
-        'permissions': [p.id for p in user.permissions]
-    })
-
-# Update the permission check in routes
-def check_permission(permission_name):
-    if 'user_id' not in session:
-        return False
-    user = User.query.get(session['user_id'])
-    return user and user.has_permission(permission_name)
-
-# Add permission check to template context
-@app.context_processor
-def utility_processor():
-    return {
-        'check_permission': check_permission
-    }
-
-@app.route('/calculator')
-def calculator():
-    settings = Settings.query.first()
-    calculator_code = settings.calculator_code if settings else '9999'
-    print(f"Loading calculator page with code: {calculator_code}")  # Debug log
-    return render_template('calculator.html', calculator_code=calculator_code)
-
-@app.route('/manifest.json')
-def manifest():
-    response = send_from_directory('static', 'manifest.json')
-    response.headers['Content-Type'] = 'application/manifest+json'
-    return response
-
-@app.route('/sw.js')
-def service_worker():
-    response = send_from_directory('static', 'sw.js')
-    response.headers['Content-Type'] = 'application/javascript'
-    response.headers['Service-Worker-Allowed'] = '/'
-    return response
-
-@app.route('/static/icons/<path:filename>')
-def serve_icon(filename):
-    response = send_from_directory('static/icons', filename)
-    if filename.endswith('.png'):
-        response.headers['Content-Type'] = 'image/png'
-    return response
+    return jsonify({'labels': [], 'values': []})
 
 @app.route('/api/slow_moving_products')
 def slow_moving_products():
-    try:
-        thirty_days_ago = datetime.now() - timedelta(days=30)
-        products = Product.query.all()
-        slow_moving = []
-        
-        for product in products:
-            last_sale = db.session.query(Invoice.date).join(InvoiceItem).filter(
-                InvoiceItem.product_id == product.id
-            ).order_by(Invoice.date.desc()).first()
-            
-            if last_sale:
-                days_since_sale = (datetime.now().date() - last_sale[0]).days
-            else:
-                days_since_sale = 30  # Default for products with no sales
-                
-            if days_since_sale >= 30:
-                slow_moving.append({
-                    'name': product.description,
-                    'days': days_since_sale
-                })
-        
-        # Sort by days and get top 10
-        slow_moving.sort(key=lambda x: x['days'], reverse=True)
-        slow_moving = slow_moving[:10]
-        
-        return jsonify({
-            'labels': [item['name'] for item in slow_moving],
-            'values': [item['days'] for item in slow_moving]
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    return jsonify({'labels': [], 'values': []})
 
 @app.route('/api/stock_sales_ratio')
 def stock_sales_ratio():
-    try:
-        # Calculate daily stock-to-sales ratio for the last 30 days
-        end_date = datetime.now().date()
-        start_date = end_date - timedelta(days=29)
-        dates = []
-        ratios = []
-        
-        current_date = start_date
-        while current_date <= end_date:
-            # Get total stock for the day
-            total_stock = db.session.query(func.sum(Product.stock)).scalar() or 0
-            
-            # Get total sales for the day
-            daily_sales = db.session.query(func.sum(InvoiceItem.quantity)).join(Invoice).filter(
-                func.date(Invoice.date) == current_date
-            ).scalar() or 1  # Use 1 to avoid division by zero
-            
-            ratio = total_stock / daily_sales
-            dates.append(current_date.strftime('%Y-%m-%d'))
-            ratios.append(round(ratio, 2))
-            
-            current_date += timedelta(days=1)
-        
-        return jsonify({
-            'labels': dates,
-            'values': ratios
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    return jsonify({'labels': [], 'values': []})
 
 @app.route('/api/inventory_aging')
 def inventory_aging():
-    try:
-        products = Product.query.all()
-        aging_buckets = {
-            '0-30 days': 0,
-            '31-60 days': 0,
-            '61-90 days': 0,
-            '90+ days': 0
-        }
-        
-        for product in products:
-            last_sale = db.session.query(Invoice.date).join(InvoiceItem).filter(
-                InvoiceItem.product_id == product.id
-            ).order_by(Invoice.date.desc()).first()
-            
-            if last_sale:
-                days_since_sale = (datetime.now().date() - last_sale[0]).days
-            else:
-                days_since_sale = 90  # Default for products with no sales
-            
-            if days_since_sale <= 30:
-                aging_buckets['0-30 days'] += 1
-            elif days_since_sale <= 60:
-                aging_buckets['31-60 days'] += 1
-            elif days_since_sale <= 90:
-                aging_buckets['61-90 days'] += 1
-            else:
-                aging_buckets['90+ days'] += 1
-        
-        return jsonify({
-            'labels': list(aging_buckets.keys()),
-            'values': list(aging_buckets.values())
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    return jsonify({'labels': [], 'values': []})
 
 @app.route('/api/sales_forecast')
 def sales_forecast():
-    try:
-        # Get historical daily sales for the last 90 days
-        end_date = datetime.now().date()
-        start_date = end_date - timedelta(days=89)
-        
-        daily_sales = db.session.query(
-            func.date(Invoice.date).label('date'),
-            func.sum(Invoice.total_amount).label('total')
-        ).filter(
-            Invoice.date >= start_date,
-            Invoice.date <= end_date
-        ).group_by(
-            func.date(Invoice.date)
-        ).order_by(
-            func.date(Invoice.date)
-        ).all()
-        
-        # Create a simple moving average forecast
-        sales_data = {row.date.strftime('%Y-%m-%d'): float(row.total) for row in daily_sales}
-        dates = []
-        actual_values = []
-        forecast_values = []
-        
-        # Calculate moving average
-        window_size = 7
-        moving_avg = []
-        
-        # Fill historical data
-        current_date = start_date
-        while current_date <= end_date:
-            date_str = current_date.strftime('%Y-%m-%d')
-            dates.append(date_str)
-            actual_values.append(sales_data.get(date_str, 0))
-            
-            # Calculate moving average for the last window_size days
-            if len(actual_values) >= window_size:
-                avg = sum(actual_values[-window_size:]) / window_size
-                moving_avg.append(avg)
-            else:
-                moving_avg.append(None)
-            
-            current_date += timedelta(days=1)
-        
-        # Generate forecast for next 30 days
-        last_avg = moving_avg[-1] if moving_avg else 0
-        for i in range(30):
-            forecast_date = end_date + timedelta(days=i+1)
-            dates.append(forecast_date.strftime('%Y-%m-%d'))
-            actual_values.append(None)
-            forecast_values.append(last_avg)
-        
-        return jsonify({
-            'labels': dates[-30:],  # Show only last 30 days
-            'actual_values': actual_values[-30:],
-            'forecast_values': forecast_values
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    return jsonify({'labels': [], 'values': []})
 
 @app.route('/api/sales_performance')
 @login_required
 def sales_performance():
-    try:
-        today = datetime.now().date()
-        
-        # Calculate daily sales
-        daily_sales = db.session.query(
-            func.sum(Invoice.total_amount).label('total')
-        ).filter(
-            func.date(Invoice.date) == today
-        ).scalar() or 0
-        
-        # Calculate weekly sales (last 7 days)
-        week_start = today - timedelta(days=6)
-        weekly_sales = db.session.query(
-            func.sum(Invoice.total_amount).label('total')
-        ).filter(
-            Invoice.date >= week_start,
-            Invoice.date <= today
-        ).scalar() or 0
-        
-        # Calculate monthly sales
-        month_start = today.replace(day=1)
-        monthly_sales = db.session.query(
-            func.sum(Invoice.total_amount).label('total')
-        ).filter(
-            Invoice.date >= month_start,
-            Invoice.date <= today
-        ).scalar() or 0
-        
-        # Calculate yearly sales
-        year_start = today.replace(month=1, day=1)
-        yearly_sales = db.session.query(
-            func.sum(Invoice.total_amount).label('total')
-        ).filter(
-            Invoice.date >= year_start,
-            Invoice.date <= today
-        ).scalar() or 0
-        
-        return jsonify({
-            'daily': round(daily_sales, 2),
-            'weekly': round(weekly_sales, 2),
-            'monthly': round(monthly_sales, 2),
-            'yearly': round(yearly_sales, 2)
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    return jsonify({'labels': [], 'values': []})
 
 @app.route('/api/sales_growth')
 @login_required
 def sales_growth():
-    try:
-        today = datetime.now().date()
-        
-        # Day over Day (DoD) Growth
-        yesterday = today - timedelta(days=1)
-        today_sales = db.session.query(
-            func.sum(Invoice.total_amount).label('total')
-        ).filter(
-            func.date(Invoice.date) == today
-        ).scalar() or 0
-        
-        yesterday_sales = db.session.query(
-            func.sum(Invoice.total_amount).label('total')
-        ).filter(
-            func.date(Invoice.date) == yesterday
-        ).scalar() or 0
-        
-        dod_growth = ((today_sales - yesterday_sales) / yesterday_sales * 100) if yesterday_sales > 0 else 0
-        
-        # Month over Month (MoM) Growth
-        current_month = today.replace(day=1)
-        last_month = (current_month - timedelta(days=1)).replace(day=1)
-        
-        current_month_sales = db.session.query(
-            func.sum(Invoice.total_amount).label('total')
-        ).filter(
-            Invoice.date >= current_month,
-            Invoice.date <= today
-        ).scalar() or 0
-        
-        last_month_sales = db.session.query(
-            func.sum(Invoice.total_amount).label('total')
-        ).filter(
-            Invoice.date >= last_month,
-            Invoice.date < current_month
-        ).scalar() or 0
-        
-        mom_growth = ((current_month_sales - last_month_sales) / last_month_sales * 100) if last_month_sales > 0 else 0
-        
-        # Year over Year (YoY) Growth
-        current_year = today.replace(month=1, day=1)
-        last_year = current_year.replace(year=current_year.year-1)
-        
-        current_year_sales = db.session.query(
-            func.sum(Invoice.total_amount).label('total')
-        ).filter(
-            Invoice.date >= current_year,
-            Invoice.date <= today
-        ).scalar() or 0
-        
-        last_year_sales = db.session.query(
-            func.sum(Invoice.total_amount).label('total')
-        ).filter(
-            Invoice.date >= last_year,
-            Invoice.date < current_year
-        ).scalar() or 0
-        
-        yoy_growth = ((current_year_sales - last_year_sales) / last_year_sales * 100) if last_year_sales > 0 else 0
-        
-        return jsonify({
-            'dod_growth': round(dod_growth, 2),
-            'mom_growth': round(mom_growth, 2),
-            'yoy_growth': round(yoy_growth, 2)
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    return jsonify({'labels': [], 'values': []})
 
 @app.route('/api/sales_trend_by_period')
 @login_required
 def sales_trend_by_period():
-    try:
-        period = request.args.get('period', 'daily')  # daily, weekly, monthly, yearly
-        end_date = datetime.now().date()
-        
-        if period == 'daily':
-            start_date = end_date - timedelta(days=29)  # Last 30 days
-            date_format = '%Y-%m-%d'
-            date_trunc = func.date(Invoice.date)
-        elif period == 'weekly':
-            start_date = end_date - timedelta(weeks=11)  # Last 12 weeks
-            date_format = '%Y-W%W'
-            date_trunc = func.date_trunc('week', Invoice.date)
-        elif period == 'monthly':
-            start_date = end_date - timedelta(days=365)  # Last 12 months
-            date_format = '%Y-%m'
-            date_trunc = func.date_trunc('month', Invoice.date)
-        else:  # yearly
-            start_date = end_date.replace(year=end_date.year-4)  # Last 5 years
-            date_format = '%Y'
-            date_trunc = func.date_trunc('year', Invoice.date)
-        
-        sales_data = db.session.query(
-            date_trunc.label('date'),
-            func.sum(Invoice.total_amount).label('total')
-        ).filter(
-            Invoice.date >= start_date,
-            Invoice.date <= end_date
-        ).group_by(
-            date_trunc
-        ).order_by(
-            date_trunc
-        ).all()
-        
-        return jsonify({
-            'labels': [row.date.strftime(date_format) for row in sales_data],
-            'values': [float(row.total) for row in sales_data]
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    return jsonify({'labels': [], 'values': []})
 
 @app.route('/users/generate-2fa', methods=['POST'])
 @login_required
@@ -2321,14 +1603,22 @@ def generate_user_2fa(id):
     totp_secret = random_base32()
     totp = TOTP(totp_secret)
     
-    # Generate TOTP URI for QR code
-    totp_uri = f'otpauth://totp/Inventory:{username}?secret={totp_secret}&issuer=Inventory'
-    
-    return jsonify({
-        'success': True,
-        'totp_secret': totp_secret,
-        'totp_uri': totp_uri
-    })
+    # Save the TOTP secret to the user
+    try:
+        user.totp_secret = totp_secret
+        db.session.commit()
+        
+        # Generate TOTP URI for QR code
+        totp_uri = f'otpauth://totp/Inventory:{username}?secret={totp_secret}&issuer=Inventory'
+        
+        return jsonify({
+            'success': True,
+            'totp_secret': totp_secret,
+            'totp_uri': totp_uri
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/invoices/list')
 def list_invoices():
@@ -2349,67 +1639,7 @@ def list_invoices():
 @login_required
 @permission_required('view_reports')
 def reports():
-    # Get products that are at or below their restock level
-    low_stock_products = Product.query.filter(Product.stock <= Product.restock_level).all()
-    
-    # Calculate total inventory cost
-    total_inventory_cost = sum(product.stock * product.price for product in Product.query.all())
-    
-    # Calculate stock-out count
-    stockout_count = Product.query.filter(Product.stock == 0).count()
-    
-    # Calculate average stock-to-sales ratio
-    products = Product.query.all()
-    total_ratio = 0
-    products_with_sales = 0
-    for product in products:
-        total_sales = db.session.query(func.sum(InvoiceItem.quantity)).filter(
-            InvoiceItem.product_id == product.id
-        ).scalar() or 0
-        if total_sales > 0:
-            total_ratio += product.stock / total_sales
-            products_with_sales += 1
-    avg_stock_sales_ratio = total_ratio / products_with_sales if products_with_sales > 0 else 0
-    
-    # Get slow-moving products count (no sales in last 30 days)
-    thirty_days_ago = datetime.now() - timedelta(days=30)
-    slow_moving_count = 0
-    for product in products:
-        recent_sales = db.session.query(InvoiceItem).join(Invoice).filter(
-            InvoiceItem.product_id == product.id,
-            Invoice.date >= thirty_days_ago
-        ).count()
-        if recent_sales == 0:
-            slow_moving_count += 1
-    
-    # Calculate stock-out frequency
-    stockout_frequency = []
-    for product in products:
-        if product.stock == 0:
-            # You would need to track stock-out history in a separate table
-            # This is a simplified version
-            stockout_frequency.append({
-                'product_name': product.description,
-                'stockout_count': 1,
-                'last_stockout': datetime.now().strftime('%Y-%m-%d'),
-                'avg_duration': 0,
-                'risk_level': 'High',
-                'risk_level_color': 'danger'
-            })
-    
-    stats = {
-        'total_products': Product.query.count(),
-        'total_invoices': Invoice.query.count(),
-        'total_sales': db.session.query(db.func.sum(Invoice.total_amount)).scalar() or 0,
-        'recent_invoices': Invoice.query.order_by(Invoice.date.desc()).limit(5).all(),
-        'low_stock_products': low_stock_products,
-        'total_inventory_cost': total_inventory_cost,
-        'stockout_count': stockout_count,
-        'avg_stock_sales_ratio': avg_stock_sales_ratio,
-        'slow_moving_count': slow_moving_count,
-        'stockout_frequency': stockout_frequency
-    }
-    return render_template('reports.html', stats=stats)
+    return redirect(url_for('index'))
 
 @app.route('/customers')
 @login_required
@@ -2954,15 +2184,276 @@ def get_db_connection():
 def offline():
     return render_template('offline.html')
 
-@app.route('/health')
-def health_check():
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        try:
+            username = request.form.get('username')
+            password = request.form.get('password')
+            totp_token = request.form.get('totp_token')
+            
+            print(f"Login attempt for user: {username}")
+            
+            user = User.query.filter_by(username=username).first()
+            if not user:
+                print(f"User not found: {username}")
+                flash('Invalid username or password', 'error')
+                return redirect(url_for('login'))
+            
+            # Verify password using the same method used for hashing
+            if not check_password_hash(user.password, password):
+                print(f"Invalid password for user: {username}")
+                flash('Invalid username or password', 'error')
+                return redirect(url_for('login'))
+            
+            # Check 2FA if enabled
+            if user.totp_enabled:
+                if not totp_token:
+                    flash('2FA token required', 'error')
+                    return redirect(url_for('login'))
+                
+                if not user.verify_totp(totp_token):
+                    print(f"Invalid 2FA token for user: {username}")
+                    flash('Invalid 2FA token', 'error')
+                    return redirect(url_for('login'))
+            
+            # Login successful
+            session.clear()
+            session['user_id'] = user.id
+            session['logged_in'] = True
+            session['is_admin'] = user.role == 'admin'
+            
+            # Store user permissions in session
+            if user.role == 'admin':
+                session['permissions'] = [p.name for p in Permission.query.all()]
+            else:
+                session['permissions'] = [p.name for p in user.permissions]
+            
+            print(f"Login successful for user: {username}")
+            print(f"User permissions: {session['permissions']}")  # Debug log
+            return redirect(url_for('index'))
+            
+        except Exception as e:
+            print(f"Login error for user {username if username else 'unknown'}: {str(e)}")
+            print(f"Full traceback: {traceback.format_exc()}")
+            flash('An error occurred during login. Please try again.', 'error')
+            return redirect(url_for('login'))
+    
+    return render_template('login.html')
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('login'))
+
+@app.before_request
+def require_login():
+    # List of routes that don't require login
+    public_routes = ['login', 'static']
+    
+    # Check if the requested endpoint is in public routes
+    if request.endpoint and request.endpoint not in public_routes:
+        if 'logged_in' not in session:
+            return redirect(url_for('login'))
+
+# Users management routes
+@app.route('/users')
+@login_required
+@admin_required
+def users():
     try:
-        # Test database connection
-        db.session.execute('SELECT 1')
-        return jsonify({"status": "healthy", "database": "connected"}), 200
+        current_user = User.query.get(session.get('user_id'))
+        if not current_user:
+            flash('Session expired. Please login again.', 'error')
+            return redirect(url_for('login'))
+        
+        if current_user.role != 'admin':
+            flash('Access denied. Admin privileges required.', 'error')
+            return redirect(url_for('index'))
+        
+        users = User.query.all()
+        permissions = Permission.query.all()
+        
+        # Group permissions by category for better organization
+        grouped_permissions = {
+            'products': [],
+            'invoices': [],
+            'customers': [],
+            'suppliers': [],
+            'others': []
+        }
+        
+        for perm in permissions:
+            if perm.name.startswith(('view_product', 'edit_product')):
+                grouped_permissions['products'].append(perm)
+            elif 'invoice' in perm.name:
+                grouped_permissions['invoices'].append(perm)
+            elif 'customer' in perm.name:
+                grouped_permissions['customers'].append(perm)
+            elif 'supplier' in perm.name:
+                grouped_permissions['suppliers'].append(perm)
+            else:
+                grouped_permissions['others'].append(perm)
+        
+        return render_template(
+            'users.html',
+            users=users,
+            permissions=permissions,
+            grouped_permissions=grouped_permissions,
+            current_user=current_user
+        )
     except Exception as e:
-        return jsonify({"status": "unhealthy", "error": str(e)}), 500
+        print(f"Error in users route: {str(e)}")
+        print(f"Full traceback: {traceback.format_exc()}")  # Add full traceback
+        db.session.rollback()
+        flash('An error occurred while loading users. Please try again.', 'error')
+        return redirect(url_for('index'))
+
+@app.route('/users', methods=['POST'])
+@login_required
+@admin_required
+def add_user():
+    try:
+        data = request.get_json()
+        
+        # Validate required fields
+        if not all(key in data for key in ['username', 'password', 'role']):
+            return jsonify({'error': 'Missing required fields'}), 400
+            
+        # Check if username exists
+        if User.query.filter_by(username=data['username']).first():
+            return jsonify({'error': 'Username already exists'}), 400
+        
+        # Create new user
+        new_user = User(
+            username=data['username'],
+            password=generate_password_hash(data['password'], method='pbkdf2:sha256'),
+            role=data['role'],
+            totp_enabled=data.get('totp_enabled', False)
+        )
+        
+        # Handle permissions
+        if data['role'] != 'admin' and 'permissions' in data:
+            try:
+                permissions = Permission.query.filter(Permission.id.in_(data['permissions'])).all()
+                new_user.permissions = permissions
+            except Exception as e:
+                print(f"Error setting permissions: {str(e)}")
+                return jsonify({'error': 'Invalid permissions data'}), 400
+        
+        db.session.add(new_user)
+        db.session.commit()
+        
+        print(f"User created successfully: {new_user.username}")
+        return jsonify({'success': True})
+        
+    except Exception as e:
+        print(f"Error creating user: {str(e)}")
+        print(f"Full traceback: {traceback.format_exc()}")
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+def update_session_permissions(user_id):
+    """Update the session permissions for a user"""
+    user = User.query.get(user_id)
+    if user:
+        if user.role == 'admin':
+            session['permissions'] = [p.name for p in Permission.query.all()]
+        else:
+            session['permissions'] = [p.name for p in user.permissions]
+        session['is_admin'] = user.role == 'admin'
+
+@app.route('/users/<int:id>', methods=['PUT'])
+@login_required
+@admin_required
+def update_user(id):
+    user = User.query.get_or_404(id)
+    data = request.get_json()
+    
+    if data['username'] != user.username and User.query.filter_by(username=data['username']).first():
+        return jsonify({'error': 'Username already exists'}), 400
+    
+    try:
+        user.username = data['username']
+        user.role = data['role']
+        if data.get('password'):
+            user.password = generate_password_hash(data['password'])
+        
+        # Update 2FA status
+        user.totp_enabled = data.get('totp_enabled', False)
+        if not user.totp_enabled:
+            user.totp_secret = None  # Clear TOTP secret if 2FA is disabled
+        
+        # Update permissions if not admin
+        if data['role'] != 'admin':
+            permissions = Permission.query.filter(Permission.id.in_(data.get('permissions', []))).all()
+            user.permissions = permissions
+        else:
+            user.permissions = []  # Clear permissions for admin as they have all permissions
+        
+        db.session.commit()
+        
+        # Update session permissions if the updated user is the current user
+        if id == session.get('user_id'):
+            update_session_permissions(id)
+            
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/users/<int:id>', methods=['DELETE'])
+@login_required
+@admin_required
+def delete_user(id):
+    if id == session.get('user_id'):
+        return jsonify({'error': 'Cannot delete your own account'}), 400
+    
+    user = User.query.get_or_404(id)
+    try:
+        db.session.delete(user)
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/users/<int:id>/permissions')
+@login_required
+@admin_required
+def get_user_permissions(id):
+    user = User.query.get_or_404(id)
+    return jsonify({
+        'permissions': [p.id for p in user.permissions]
+    })
+
+# Add error handlers
+@app.errorhandler(500)
+def internal_error(error):
+    db.session.rollback()
+    return "Internal Server Error. Please try again.", 500
+
+@app.errorhandler(504)
+def gateway_timeout(error):
+    return "Request timed out. Please try again.", 504
+
+# Add database connection timeout and pool settings
+app.config['SQLALCHEMY_POOL_SIZE'] = 10
+app.config['SQLALCHEMY_POOL_TIMEOUT'] = 30
+app.config['SQLALCHEMY_POOL_RECYCLE'] = 1800  # Recycle connections after 30 minutes
+
+@app.route('/sw.js')
+def service_worker():
+    return '', 404
+
+@app.route('/manifest.json')
+def manifest():
+    return '', 404
 
 if __name__ == '__main__':
-    init_db()  # Initialize database with sample data
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    try:
+        init_db()  # Initialize database with sample data
+        app.run(host='0.0.0.0', port=5000, debug=True)
+    except Exception as e:
+        print(f"Error starting application: {str(e)}")
+        raise
